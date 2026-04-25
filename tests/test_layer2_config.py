@@ -1,0 +1,142 @@
+"""Tests for layer2_processing.config — ProcessingConfig loading & validation."""
+
+from __future__ import annotations
+
+import textwrap
+from pathlib import Path
+
+import pytest
+import yaml
+
+from layer2_processing.config import ProcessingConfig, load_config
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_VALID_YAML = textwrap.dedent("""\
+    lsl_stream_name: BCI_RawEEG
+    sample_rate_hz: 500
+    notch_freq_hz: 60
+    notch_q: 35
+    bandpass_low_hz: 5
+    bandpass_high_hz: 45
+    bandpass_order: 4
+    artefact_threshold_uv: 100.0
+    epoch_length_s: 2.0
+    epoch_step_s: 0.5
+    classifier: fbcca
+    sub_bands_hz:
+      - [6, 90]
+      - [14, 90]
+    sub_band_filter_order: 5
+    weight_a: 1.25
+    weight_b: 0.25
+    n_harmonics: 3
+    stimulus_frequencies_hz: [9.0, 12.0, 15.0]
+    snr_min_db: 3.5
+    snr_noise_band_hz: 1.0
+    snr_channel_index: 0
+    websocket_host: localhost
+    websocket_port: 9001
+    osc_host: 127.0.0.1
+    osc_port: 9000
+    osc_address: /bci/command
+""")
+
+
+def _write_yaml(tmp_path: Path, content: str) -> Path:
+    p = tmp_path / "cfg.yaml"
+    p.write_text(content)
+    return p
+
+
+# ---------------------------------------------------------------------------
+# Happy-path
+# ---------------------------------------------------------------------------
+
+def test_load_valid_yaml(tmp_path):
+    cfg = load_config(_write_yaml(tmp_path, _VALID_YAML))
+    assert isinstance(cfg, ProcessingConfig)
+    assert cfg.lsl_stream_name == "BCI_RawEEG"
+    assert cfg.sample_rate_hz == 500
+    assert cfg.stimulus_frequencies_hz == [9.0, 12.0, 15.0]
+    assert cfg.classifier == "fbcca"
+
+
+def test_derived_epoch_samples(tmp_path):
+    cfg = load_config(_write_yaml(tmp_path, _VALID_YAML))
+    assert cfg.epoch_length_samples == 1000   # 2.0 s × 500 Hz
+    assert cfg.epoch_step_samples == 250      # 0.5 s × 500 Hz
+
+
+def test_nyquist_property(tmp_path):
+    cfg = load_config(_write_yaml(tmp_path, _VALID_YAML))
+    assert cfg.nyquist_hz == 250.0
+
+
+def test_override_applies(tmp_path):
+    p = _write_yaml(tmp_path, _VALID_YAML)
+    cfg = load_config(p, overrides={"classifier": "fbcca", "snr_min_db": 5.0})
+    assert cfg.snr_min_db == 5.0
+
+
+def test_default_config_file_loads():
+    """The shipped layer2_default.yaml must be valid."""
+    default = Path("configs/layer2_default.yaml")
+    if not default.exists():
+        pytest.skip("configs/layer2_default.yaml not found — run from project root.")
+    cfg = load_config(default)
+    assert cfg.stimulus_frequencies_hz, "stimulus_frequencies_hz must not be empty"
+
+
+# ---------------------------------------------------------------------------
+# Validation failures
+# ---------------------------------------------------------------------------
+
+def _bad_yaml(tmp_path: Path, **overrides) -> Path:
+    raw = yaml.safe_load(_VALID_YAML)
+    raw.update(overrides)
+    text = yaml.dump(raw)
+    return _write_yaml(tmp_path, text)
+
+
+def test_empty_stimulus_frequencies_rejected(tmp_path):
+    with pytest.raises(ValueError, match="stimulus_frequencies_hz"):
+        load_config(_bad_yaml(tmp_path, stimulus_frequencies_hz=[]))
+
+
+def test_frequency_above_nyquist_rejected(tmp_path):
+    # 9 Hz at 500 Hz SR → nyquist 250; 300 Hz is over limit
+    with pytest.raises(ValueError, match="stimulus_frequencies_hz"):
+        load_config(_bad_yaml(tmp_path, stimulus_frequencies_hz=[300.0]))
+
+
+def test_bandpass_out_of_order_rejected(tmp_path):
+    with pytest.raises(ValueError, match="bandpass"):
+        load_config(_bad_yaml(tmp_path, bandpass_low_hz=50.0, bandpass_high_hz=10.0))
+
+
+def test_empty_sub_bands_rejected(tmp_path):
+    with pytest.raises(ValueError, match="sub_bands_hz"):
+        load_config(_bad_yaml(tmp_path, sub_bands_hz=[]))
+
+
+def test_sub_band_above_nyquist_rejected(tmp_path):
+    with pytest.raises(ValueError, match="sub_band"):
+        load_config(_bad_yaml(tmp_path, sub_bands_hz=[[6, 300]]))
+
+
+def test_zero_harmonics_rejected(tmp_path):
+    with pytest.raises(ValueError, match="n_harmonics"):
+        load_config(_bad_yaml(tmp_path, n_harmonics=0))
+
+
+def test_negative_artefact_threshold_rejected(tmp_path):
+    with pytest.raises(ValueError, match="artefact_threshold_uv"):
+        load_config(_bad_yaml(tmp_path, artefact_threshold_uv=-1.0))
+
+
+def test_epoch_step_larger_than_epoch_rejected(tmp_path):
+    with pytest.raises(ValueError, match="epoch_step_s"):
+        load_config(_bad_yaml(tmp_path, epoch_length_s=1.0, epoch_step_s=2.0))

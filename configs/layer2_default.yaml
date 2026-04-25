@@ -1,0 +1,49 @@
+# Layer 2 — Signal Processing & Classification configuration
+# All values here are normative; classifier code reads ONLY from this file.
+
+lsl_stream_name: BCI_RawEEG
+sample_rate_hz: 500
+
+# --- Preprocessing -----------------------------------------------------------
+notch_freq_hz: 60
+notch_q: 35
+bandpass_low_hz: 5
+bandpass_high_hz: 45
+bandpass_order: 4
+artefact_threshold_uv: 100.0
+
+# --- Epoching ----------------------------------------------------------------
+epoch_length_s: 2.0
+epoch_step_s: 0.5
+
+# --- Classifier (FBCCA, calibration-free) ------------------------------------
+classifier: fbcca
+sub_bands_hz:
+  - [6, 90]
+  - [14, 90]
+  - [22, 90]
+  - [30, 90]
+sub_band_filter_order: 5      # Chebyshev Type I, 1 dB ripple
+weight_a: 1.25                # w_k = k^(-a) + b   (Chen et al. 2015)
+weight_b: 0.25
+n_harmonics: 3
+
+# Fully config-driven stimulus set — Layer 3 must publish the same list
+stimulus_frequencies_hz: [9.0, 10.0, 12.0, 15.0, 18.0, 30.0]
+
+# --- SNR gate ----------------------------------------------------------------
+snr_min_db: 3.5
+snr_noise_band_hz: 1.0
+snr_channel_index: 0          # 0 = Oz row in the cyton_default.yaml frame
+
+# --- Outputs -----------------------------------------------------------------
+websocket_host: localhost
+websocket_port: 9001
+osc_host: 127.0.0.1
+osc_port: 9000
+osc_address: /bci/command
+
+# --- Loop --------------------------------------------------------------------
+inlet_resolve_timeout_s: 5.0
+inlet_pull_timeout_s: 0.05
+log_interval_s: 5

@@ -1,0 +1,38 @@
+# OpenBCI Cyton — Layer 1 acquisition configuration
+board: cyton
+
+# Serial port for the Cyton USB dongle.
+# Set to "auto" to let the driver detect the first matching VID/PID.
+serial_port: auto
+
+# BrainFlow sample rate.  500 Hz is required to capture harmonics up to 3×30 Hz.
+sample_rate_hz: 500
+
+# Total channels exposed by the board (Cyton = 8).
+channel_count: 8
+
+# Electrode labels in channel order (use "--" for unused channels).
+# Electrode placement follows the 10-20 system; occipital cluster for SSVEP.
+channel_labels:
+  - Oz   # ch1 – primary occipital
+  - O1   # ch2 – left occipital
+  - O2   # ch3 – right occipital
+  - Pz   # ch4 – parietal reference
+  - "--"  # ch5
+  - "--"  # ch6
+  - "--"  # ch7
+  - "--"  # ch8
+
+# Maximum allowed electrode–skin contact impedance in kΩ.
+# BCI session is blocked until all active (non-"--") channels meet this threshold.
+impedance_max_kohm: 10.0
+
+# LSL stream identifiers — downstream layers discover the stream by name only.
+lsl_stream_name: BCI_RawEEG
+lsl_stream_type: EEG
+
+# Acquisition loop pull interval in milliseconds.
+pull_interval_ms: 10
+
+# How often the acquisition loop logs a health summary (seconds).
+log_interval_s: 5
