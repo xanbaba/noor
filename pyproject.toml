@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neuron"
-version = "0.2.0"
-description = "SSVEP-BCI AR/VR system — Layer 1 (acquisition) + Layer 2 (signal processing)"
+version = "0.3.0"
+description = "SSVEP-BCI AR/VR system — Layer 1 (acquisition) + Layer 2 (signal processing) + Layer 3 (backend MVP)"
 requires-python = ">=3.11"
 dependencies = [
     "brainflow~=5.14",
@@ -17,6 +17,8 @@ dependencies = [
     "mne~=1.7",
     "python-osc~=1.8",
     "websockets~=12.0",
+    "fastapi~=0.115",
+    "uvicorn~=0.30",
 ]
 
 [project.optional-dependencies]
@@ -27,7 +29,10 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["layer1_acquisition*", "layer2_processing*"]
+include = ["layer1_acquisition*", "layer2_processing*", "layer3_backend*"]
+
+[tool.setuptools.package-data]
+"layer3_backend" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

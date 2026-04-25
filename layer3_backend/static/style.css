@@ -1,0 +1,184 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;600;800&display=swap');
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --border: #1e1e2e;
+  --text: #e0e0ec;
+  --text-dim: #6a6a80;
+  --accent-12: #00e5ff;
+  --accent-15: #ff3d71;
+  --glow-12: rgba(0, 229, 255, 0.15);
+  --glow-15: rgba(255, 61, 113, 0.15);
+  --success: #00e676;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Outfit', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 2.5rem;
+  padding: 2rem;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.header {
+  text-align: center;
+}
+.header h1 {
+  font-size: 1.1rem;
+  font-weight: 300;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ── Tiles ────────────────────────────────────────────────────────────── */
+
+.tiles {
+  display: flex;
+  gap: 3rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.tile {
+  width: 240px;
+  height: 240px;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  position: relative;
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+}
+
+.tile .freq-label {
+  font-family: var(--mono);
+  font-size: 2.4rem;
+  font-weight: 700;
+  opacity: 0.15;
+  transition: opacity 0.08s;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.tile .freq-unit {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-weight: 400;
+  opacity: 0.1;
+  letter-spacing: 0.15em;
+  margin-top: 0.3rem;
+  z-index: 1;
+}
+
+/* ON state — filled bright */
+.tile.on {
+  background: var(--text);
+}
+.tile.on .freq-label,
+.tile.on .freq-unit {
+  opacity: 0;
+}
+
+/* Tile accent colours */
+.tile[data-freq="12"] { --tile-accent: var(--accent-12); --tile-glow: var(--glow-12); }
+.tile[data-freq="15"] { --tile-accent: var(--accent-15); --tile-glow: var(--glow-15); }
+
+/* Selected highlight (from classifier match) */
+.tile.selected {
+  border-color: var(--tile-accent);
+  box-shadow: 0 0 40px 8px var(--tile-glow), inset 0 0 30px var(--tile-glow);
+}
+
+/* ── Status panel ─────────────────────────────────────────────────────── */
+
+.status {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.2rem 2.5rem;
+  min-width: 420px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1.8;
+  color: var(--text-dim);
+}
+
+.status .detected-freq {
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-family: var(--sans);
+  color: var(--text);
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.status .meta {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  margin-top: 0.3rem;
+}
+
+.status .meta span {
+  color: var(--text-dim);
+}
+
+.status .meta .value {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.status.connected .dot {
+  color: var(--success);
+}
+
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  margin-right: 6px;
+  vertical-align: middle;
+  transition: background 0.3s;
+}
+
+.status.connected .dot {
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+
+.footer {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  opacity: 0.5;
+}

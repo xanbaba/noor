@@ -1,0 +1,14 @@
+# Layer 3 — Backend MVP configuration
+
+# Upstream Layer 2 WebSocket (the pipeline's broadcast endpoint)
+layer2_ws_url: ws://localhost:9001
+
+# This server
+host: localhost
+port: 8000
+
+# Stimulus frequencies displayed on the frontend (must match Layer 2 config)
+stimulus_frequencies_hz: [12.0, 15.0]
+
+# Static file directory (relative to layer3_backend package root)
+static_dir: static

@@ -367,3 +367,86 @@ python -m pytest tests/test_layer2_config.py tests/test_preprocessing.py \
 | `test_snr.py` | Pure-sine → high SNR; noise → low SNR; channel selection |
 | `test_outputs.py` | WebSocket broadcast; OSC UDP delivery; JSON payload |
 | `test_layer2_e2e.py` | Synthetic SSVEP source → pipeline → correct SELECT emitted |
+
+---
+
+## Layer 3 + Layer 4 MVP — Backend Bridge & Browser Frontend
+
+### What it does
+
+A thin FastAPI server that:
+
+1. Subscribes to Layer 2's WebSocket on `:9001` (the bridge).
+2. Re-broadcasts every `SELECT` payload to all connected browser clients.
+3. Serves a single-page SSVEP frontend with two flickering tiles (12 Hz,
+   15 Hz) and a live status panel showing detected frequency, SNR, and
+   confidence.
+
+This is the **MVP** — no spelling, no navigation, no AI predictor.  The
+`AbstractClassifier` interface and the `stimulus_frequencies_hz` config field
+exist so full speller pages can be added later without restructuring.
+
+### Additional dependencies
+
+| Package | Purpose |
+|---|---|
+| `fastapi~=0.115` | HTTP + WebSocket server |
+| `uvicorn~=0.30` | ASGI server to host FastAPI |
+
+### Running the full stack (no Cyton)
+
+```powershell
+# Terminal 1 — synthetic 12 Hz SSVEP on BCI_RawEEG_Test
+python scripts/synthetic_ssvep_source.py --frequency 12.0
+
+# Terminal 2 — Layer 2 pipeline
+python -m layer2_processing --stream-name BCI_RawEEG_Test
+
+# Terminal 3 — Layer 3 backend + frontend
+python -m layer3_backend
+
+# Browser — open http://localhost:8000
+```
+
+You should see two large flickering tiles (12 Hz and 15 Hz).  The status
+panel updates ~2x/sec with the detected frequency, SNR, and confidence.
+The tile matching the detected frequency briefly highlights on each emission.
+
+### Layer 3 CLI options
+
+| Flag | Default | Description |
+|---|---|---|
+| `--config PATH` | `configs/layer3_default.yaml` | YAML configuration file |
+| `--host HOST` | `localhost` | Bind host |
+| `--port PORT` | `8000` | Bind port |
+| `--layer2-ws URL` | `ws://localhost:9001` | Layer 2 WebSocket URL |
+| `--log-level LEVEL` | `INFO` | Logging verbosity |
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Serves the SSVEP flicker page (`index.html`) |
+| `/health` | GET | Returns `{"ok": true}` |
+| `/config` | GET | Returns `{"stimulus_frequencies_hz": [12.0, 15.0]}` |
+| `/ws` | WS | Browser clients connect here; receives re-broadcast SELECT payloads |
+
+### Frequency note (60 Hz laptop)
+
+The MVP uses `[12.0, 15.0]` Hz — both are exact divisors of 60 Hz (5-frame
+and 4-frame periods respectively).  When moving to the Meta Quest 3 (90 Hz),
+widen the list to `[9, 10, 12, 15, 18, 30]` in both `configs/layer2_default.yaml`
+and `configs/layer3_default.yaml`.
+
+### Layer 3 tests
+
+```powershell
+python -m pytest tests/test_layer3_config.py tests/test_layer3_bridge.py \
+                 tests/test_layer3_server.py -v
+```
+
+| Test module | What it covers |
+|---|---|
+| `test_layer3_config.py` | YAML loading, validation, overrides |
+| `test_layer3_bridge.py` | Broadcaster, bridge receive + reconnect, clean shutdown |
+| `test_layer3_server.py` | `/`, `/health`, `/config` endpoints via httpx |

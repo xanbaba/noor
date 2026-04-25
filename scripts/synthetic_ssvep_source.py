@@ -11,6 +11,9 @@ Usage::
 
     python scripts/synthetic_ssvep_source.py --frequency 12.0 --duration 60
 
+    # Randomly switch among several frequencies every few seconds (same Oz SSVEP)
+    python scripts/synthetic_ssvep_source.py --frequencies 12 15 --frequency-switch-s 3
+
 Run this in one terminal, then in another start::
 
     python -m layer2_processing --stream-name BCI_RawEEG_Test
@@ -89,7 +92,26 @@ def _build_parser() -> argparse.ArgumentParser:
         "--frequency",
         type=float,
         default=12.0,
-        help="Stimulus frequency in Hz to embed on Oz (default: 12.0).",
+        help="Single stimulus frequency in Hz on Oz (default: 12.0). "
+        "Ignored if --frequencies is set.",
+    )
+    p.add_argument(
+        "--frequencies",
+        nargs="+",
+        type=float,
+        default=None,
+        metavar="HZ",
+        help="One or more stimulus frequencies (Hz). Each --frequency-switch-s "
+        "wall-clock interval, a new frequency is chosen uniformly at random from "
+        "this list (for testing dynamic gaze / classifier tracking). "
+        "Overrides --frequency when given.",
+    )
+    p.add_argument(
+        "--frequency-switch-s",
+        type=float,
+        default=2.0,
+        help="Seconds between random picks from --frequencies (default: 2.0). "
+        "Ignored when only a single frequency is active.",
     )
     p.add_argument(
         "--amplitude-uv",
@@ -152,6 +174,24 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     rng = np.random.default_rng(args.seed)
 
+    if args.frequencies is not None:
+        freq_list = [float(f) for f in args.frequencies]
+    else:
+        freq_list = [float(args.frequency)]
+
+    if not freq_list:
+        print("ERROR: frequency list is empty.", file=sys.stderr)
+        return 2
+    if any(f <= 0 for f in freq_list):
+        print("ERROR: all frequencies must be > 0 Hz.", file=sys.stderr)
+        return 2
+    if len(freq_list) > 1 and args.frequency_switch_s <= 0:
+        print(
+            "ERROR: --frequency-switch-s must be > 0 when using multiple frequencies.",
+            file=sys.stderr,
+        )
+        return 2
+
     if args.channels < args.ssvep_channel + 1:
         print(
             f"ERROR: --ssvep-channel {args.ssvep_channel} out of range for "
@@ -169,10 +209,17 @@ def main(argv: list[str] | None = None) -> int:
     fs = args.sample_rate
     chunk = args.chunk_size
     chunk_dt = chunk / fs
+    rotate_freqs = len(freq_list) > 1
+    current_f = float(rng.choice(freq_list)) if rotate_freqs else freq_list[0]
 
+    freq_desc = (
+        f"random among {freq_list} every {args.frequency_switch_s:g}s"
+        if rotate_freqs
+        else f"{current_f:g} Hz"
+    )
     print(
         f"Streaming '{args.stream_name}' "
-        f"({args.channels} ch @ {fs} Hz, {args.frequency} Hz on ch {args.ssvep_channel}, "
+        f"({args.channels} ch @ {fs} Hz, {freq_desc} on ch {args.ssvep_channel}, "
         f"sig={args.amplitude_uv} µV / noise={args.noise_uv} µV)"
     )
     print(
@@ -184,19 +231,31 @@ def main(argv: list[str] | None = None) -> int:
     n_emitted = 0
     t0 = time.monotonic()
     next_emit = t0
+    next_freq_switch = t0 + args.frequency_switch_s if rotate_freqs else float("inf")
 
     try:
         while True:
-            elapsed = time.monotonic() - t0
+            now = time.monotonic()
+            elapsed = now - t0
             if args.duration > 0 and elapsed >= args.duration:
                 break
+
+            if rotate_freqs and now >= next_freq_switch:
+                prev = current_f
+                current_f = float(rng.choice(freq_list))
+                next_freq_switch = now + args.frequency_switch_s
+                print(
+                    f"[{time.strftime('%H:%M:%S')}] switched stimulus "
+                    f"{prev:g} Hz → {current_f:g} Hz",
+                    flush=True,
+                )
 
             # Time vector for this chunk (continuous phase)
             t_idx = np.arange(n_emitted, n_emitted + chunk) / fs
             ssvep = np.zeros(chunk, dtype=np.float64)
             for h in range(1, args.harmonics + 2):  # fundamental + harmonics
                 amp = args.amplitude_uv / h  # 1/h amplitude rolloff
-                ssvep += amp * np.sin(2 * np.pi * h * args.frequency * t_idx)
+                ssvep += amp * np.sin(2 * np.pi * h * current_f * t_idx)
 
             noise = pink_noise(chunk, args.channels, rng) * args.noise_uv
             data = noise.astype(np.float32)

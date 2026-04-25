@@ -6,7 +6,7 @@
 
 **Layer 2 — Signal Processing** is the most significantly enhanced section. The algorithm stack is now: notch filter (60 Hz) → bandpass (5–45 Hz, 4th-order Butterworth) → epoch windowing (1–4s sliding) → **Filter Bank CCA (FBCCA)** as the primary classifier, with TRCA as the high-accuracy fallback when calibration data is available. Specific sub-band definitions, harmonic sets, and SNR thresholds are included. Accuracy enhancement strategies include spatial filtering with CSP/xDAWN, ensemble voting across epoch lengths, and online drift correction.
 
-**Layer 3 — Backend** gains explicit FastAPI endpoint contracts, a context-aware frequency→action mapping schema, and a clarification that the AI predictor should use a locally-served quantized LLM (e.g., Mistral-7B via llama.cpp) rather than a cloud API call, to eliminate round-trip latency from the spelling loop.
+**Layer 3 — Backend** gains explicit FastAPI endpoint contracts, a context-aware frequency→action mapping schema, and a clarification that the AI predictor uses Google's **Gemini API** (`gemini-2.5-flash` via the `google-genai` SDK), with aggressive prefix caching of partial-word predictions to keep the perceived spelling latency below 200 ms.
 
 **Layer 4 — Meta Quest Frontend** is rewritten for the Quest 3 specifically: 90/120 Hz display modes, custom GLSL shader implementation for frame-synchronised flickering, foveated rendering considerations, and a spatial UI layout designed for seated wheelchair users. Integration with Layer 2/3 via a local WebSocket server running on the companion PC is fully specified.Click any node in the diagram to ask a follow-up. Here is the full revised document:
 
@@ -82,7 +82,7 @@ The full FBCCA pipeline on a 2-second, 8-channel, 500 Hz epoch executes in under
 
 ## Layer 3 — Backend State and AI Coordinator
 
-**Stack:** Python 3.11, FastAPI 0.111, `python-osc`, `websockets`, `llama-cpp-python` (Mistral-7B-Instruct-v0.2, Q4_K_M quantisation), SQLite via `aiosqlite`.
+**Stack:** Python 3.11, FastAPI 0.111, `python-osc`, `websockets`, `google-genai` (Gemini API, `gemini-2.5-flash` model), SQLite via `aiosqlite`.
 
 ### 3.1 Context Manager
 
@@ -112,9 +112,9 @@ This externalises all UI logic from both the signal processing layer and the VR 
 
 ### 3.2 AI Predictor
 
-The predictor runs a locally-served Mistral-7B-Instruct-v0.2 (Q4_K_M, 4-bit quantised) via `llama-cpp-python`'s Python bindings, targeting under 80 ms inference on a CPU with AVX2 support. Do not use a remote API (e.g., OpenAI): round-trip latency of 200–800 ms is perceptible and degrades the spelling rhythm.
+The predictor calls Google's **Gemini API** (`gemini-2.5-flash` model) via the `google-genai` Python SDK. The API key is loaded from the `GEMINI_API_KEY` environment variable and never committed to source. Typical end-to-end latency is 150–400 ms per request from a North-American POP — slower than a local LLM, but eliminated as a perceived bottleneck through aggressive prefix caching (see below) and concurrent dispatch (the prediction call is fired the moment a letter is appended, in parallel with the UI feedback flash).
 
-On each letter append, pass the current partial word to the LLM with the prompt: `"Complete this partial word with 4 likely completions. Respond with only a JSON array of strings. Partial: '{buf}'"`. Parse the JSON array and push the 4 predictions to the VR frontend via the WebSocket state update. Cache predictions keyed by the last 3 characters of the buffer to avoid redundant inference calls.
+On each letter append, pass the current partial word to Gemini with the prompt: `"Complete this partial word with 4 likely completions. Respond with only a JSON array of strings. Partial: '{buf}'"`. The response is parsed (`response.text` → `json.loads`) and the 4 predictions are pushed to the VR frontend via the WebSocket state update. Maintain an in-memory LRU cache keyed by the last 3 characters of the buffer (capped at 1024 entries) to absorb redundant inference calls during fast typing or backspace cycles. Network failures degrade gracefully: if the Gemini call times out (>800 ms) or returns an error, an empty `predictions` list is pushed and the user can keep spelling without prediction assistance.
 
 For full-sentence prediction (submit word → predict next word), use a larger context window with the last 3 accepted words and request the next most likely word. This maps to the predictive word buttons on the speller page.
 
@@ -182,7 +182,7 @@ Enable **Fixed Foveated Rendering (FFR)** in `OVRManager` (`fixedFoveatedRenderi
 2. **User:** Fixates on 'B' for approximately 2 seconds.
 3. **Layer 1:** BrainFlow streams 500 Hz raw EEG from Oz/O1/O2/Pz to the `BCI_RawEEG` LSL outlet.
 4. **Layer 2:** The sliding 2-second epoch is preprocessed (notch → bandpass → CAR), decomposed into 4 FBCCA sub-bands, and scored against reference signals at 9, 10, 12, 15, 18, 30 Hz. The 10 Hz channel produces `ρ_weighted = 0.91`; SNR = 5.2 dB (> 3.5 dB gate). Emits `{"command": "SELECT", "frequency": 10.0, "snr_db": 5.2}` over WebSocket.
-5. **Layer 3:** FastAPI receives the command. Context manager state is `SpellerPage`; 10.0 Hz maps to `APPEND_LETTER: B`. The text buffer becomes `"B"`. Mistral-7B infers in 62 ms: `["Because", "But", "Before", "Being"]`. Pushes `UIStateUpdate` to the Quest WebSocket.
+5. **Layer 3:** FastAPI receives the command. Context manager state is `SpellerPage`; 10.0 Hz maps to `APPEND_LETTER: B`. The text buffer becomes `"B"`. Gemini API returns in 220 ms: `["Because", "But", "Before", "Being"]`. Pushes `UIStateUpdate` to the Quest WebSocket.
 6. **Frontend (Quest 3):** `NetworkListener` receives the update. Tile 'B' flashes green for 300 ms; all tiles suppress flickering for 300 ms. Confirmation tone plays. Buffer text bar updates to `"B"`. Prediction row updates with the four LLM suggestions.
 
 ---
@@ -192,7 +192,7 @@ Enable **Fixed Foveated Rendering (FFR)** in `OVRManager` (`fixedFoveatedRenderi
 | Decision | Chosen approach | Reason |
 |---|---|---|
 | Classifier | FBCCA (primary), TRCA (optional) | Zero calibration vs. ~3 min for 8–15% accuracy gain |
-| AI predictor | Local Mistral-7B Q4 | < 80 ms vs. 200–800 ms cloud; no network dependency |
+| AI predictor | Gemini API (gemini-2.5-flash) + LRU cache | Higher quality predictions and zero local GPU/CPU footprint; cache absorbs the 200-400 ms round-trip |
 | Flicker implementation | URP Renderer Feature + HLSL | Frame-synchronised; C# Update loop introduces jitter |
 | Valid frequencies | Divisors of 90 Hz display rate | Inaccurate frequency = degraded SNR and false positives |
 | Epoch length | 2 s default, ensemble with 1/3 s | Balances ITR (~30 bits/min) with accuracy (> 90%) |

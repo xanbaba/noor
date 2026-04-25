@@ -28,8 +28,11 @@ weight_a: 1.25                # w_k = k^(-a) + b   (Chen et al. 2015)
 weight_b: 0.25
 n_harmonics: 3
 
-# Fully config-driven stimulus set — Layer 3 must publish the same list
-stimulus_frequencies_hz: [9.0, 10.0, 12.0, 15.0, 18.0, 30.0]
+# Fully config-driven stimulus set — Layer 3 must publish the same list.
+# Narrowed to two 60 Hz divisors for the laptop browser MVP (12 Hz = 5-frame
+# period, 15 Hz = 4-frame period).  Widen to the full Quest 3 set
+# [9, 10, 12, 15, 18, 30] (90 Hz divisors) when the VR frontend lands.
+stimulus_frequencies_hz: [12.0, 15.0]
 
 # --- SNR gate ----------------------------------------------------------------
 snr_min_db: 3.5

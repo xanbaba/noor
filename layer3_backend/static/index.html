@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SSVEP-BCI &mdash; Layer 4 MVP</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <h1>SSVEP&thinsp;&middot;&thinsp;BCI</h1>
+    </div>
+
+    <!-- Stimulus tiles -->
+    <div class="tiles">
+      <div class="tile" id="tile-12" data-freq="12">
+        <span class="freq-label">12</span>
+        <span class="freq-unit">Hz</span>
+      </div>
+      <div class="tile" id="tile-15" data-freq="15">
+        <span class="freq-label">15</span>
+        <span class="freq-unit">Hz</span>
+      </div>
+    </div>
+
+    <!-- Status panel -->
+    <div class="status" id="status">
+      <span class="dot"></span>
+      <span class="detected-freq" id="detected-freq">&mdash;</span>
+      <div class="meta">
+        <span>SNR <span class="value" id="snr-value">&mdash;</span></span>
+        <span>Conf <span class="value" id="conf-value">&mdash;</span></span>
+        <span>Epoch <span class="value" id="epoch-value">&mdash;</span></span>
+      </div>
+    </div>
+
+    <div class="footer">Layer 4 MVP &middot; 60 Hz laptop &middot; gaze at a tile</div>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
