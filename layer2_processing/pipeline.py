@@ -34,6 +34,8 @@ class PipelineStats:
     epochs_artefactual: int = 0
     epochs_below_snr: int = 0
     commands_emitted: int = 0
+    # Peak-to-peak (µV, max over channels) after filters on the last processed epoch
+    last_max_ptp_uv: float = 0.0
 
 
 def build_payload(
@@ -83,6 +85,7 @@ class Pipeline:
         self.stats = PipelineStats()
         self._stop = threading.Event()
         self._last_log = time.monotonic()
+        self._last_ptp_eval_max: float = 0.0
 
     def stop(self) -> None:
         self._stop.set()
@@ -138,10 +141,22 @@ class Pipeline:
         self.stats.epochs_seen += 1
 
         result = self._preproc.process(epoch)
+        ptp = result.peak_to_peak_uv
+        idx = self._cfg.artefact_channel_indices
+        if idx is None:
+            self._last_ptp_eval_max = float(ptp.max()) if ptp.size else 0.0
+        else:
+            valid = [i for i in idx if 0 <= i < int(ptp.shape[0])]
+            self._last_ptp_eval_max = float(ptp[valid].max()) if valid else float(ptp.max())
+        self.stats.last_max_ptp_uv = float(ptp.max()) if ptp.size else 0.0
+
         if result.artefactual:
             self.stats.epochs_artefactual += 1
             logger.debug(
-                "Epoch dropped (artefact) | max_ptp=%.1f µV", float(result.peak_to_peak_uv.max())
+                "Epoch dropped (artefact) | max_ptp_eval=%.1f µV (threshold=%.1f on %s)",
+                self._last_ptp_eval_max,
+                self._cfg.artefact_threshold_uv,
+                "all ch" if idx is None else f"indices {list(idx)}",
             )
             return
 
@@ -197,11 +212,14 @@ class Pipeline:
             return
         self._last_log = now
         logger.info(
-            "Health | epochs=%d | artefactual=%d | snr_rejected=%d | emitted=%d",
+            "Health | epochs=%d | artefactual=%d | snr_rejected=%d | emitted=%d | "
+            "last_max_ptp=%.1f µV (eval_max=%.1f)",
             self.stats.epochs_seen,
             self.stats.epochs_artefactual,
             self.stats.epochs_below_snr,
             self.stats.commands_emitted,
+            self.stats.last_max_ptp_uv,
+            self._last_ptp_eval_max,
         )
 
 

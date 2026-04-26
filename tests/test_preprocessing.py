@@ -27,6 +27,7 @@ def _make_cfg(**overrides):
         bandpass_high_hz=45.0,
         bandpass_order=4,
         artefact_threshold_uv=100.0,
+        artefact_channel_indices=None,
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)

@@ -37,17 +37,21 @@ Quest 3 frontend, game engine, etc.).
     O1 — Oz — O2   ← Channel cluster for SSVEP
 ```
 
-**Active channels (ch 1–4):**
+**Default Cyton channel order** (`configs/cyton_default.yaml` → `channel_labels`):
 
-| Channel | Label | Location |
+| Cyton CH | Label | Typical location |
 |---|---|---|
 | 1 | Oz | Primary occipital (midline) |
 | 2 | O1 | Left occipital |
 | 3 | O2 | Right occipital |
-| 4 | Pz | Parietal reference |
+| 4 | POz | Midline parieto-occipital |
+| 5 | PO3 | Left parieto-occipital |
+| 6 | PO4 | Right parieto-occipital |
+| 7 | Pz | Parietal midline |
+| 8 | Cz | Central midline |
 
-Channels 5–8 are unused (`--`) but still streamed to maintain the fixed
-8-channel LSL contract.
+Edit `channel_labels` if your cap wiring order differs. Layer 2’s SNR gate uses
+`snr_channel_index` (default `0` = first row, expected Oz).
 
 ---
 
@@ -59,8 +63,9 @@ Channels 5–8 are unused (`--`) but still streamed to maintain the fixed
    swab. Clean residue with 70% isopropyl alcohol.
 3. **Apply paste.** Fill the cup electrode with Ten20 paste (or equivalent).
    Press firmly for 5–10 seconds and secure with surgical tape or an EEG cap.
-4. **Ground.** Place the Cyton's SRB2 ground lead on the right mastoid (A2)
-   using a flat Ag/AgCl electrode and paste.
+4. **Reference / ground.** Follow your OpenBCI wiring guide (e.g. SRB on the
+   right earlobe for the default cap mapping in `cyton_default.yaml`, or mastoid
+   if you prefer that montage).
 5. **Impedance check.** The software will automatically measure impedance at
    session start and block acquisition if any active channel exceeds 10 kΩ.
    Re-apply paste and recheck if any channel fails.
@@ -149,7 +154,7 @@ Edit `configs/cyton_default.yaml` to adjust:
 | `board` | `cyton` | Board driver: `cyton` or `synthetic` |
 | `serial_port` | `auto` | COM port, or `auto` to detect |
 | `sample_rate_hz` | `500` | Must be ≥ 250 Hz (500 recommended) |
-| `channel_labels` | `[Oz, O1, O2, Pz, --, ...]` | Per-channel electrode label |
+| `channel_labels` | `[Oz, O1, O2, POz, PO3, PO4, Pz, Cz]` | Per Cyton CH1–8, LSL row order |
 | `impedance_max_kohm` | `10.0` | Gate threshold in kΩ |
 | `lsl_stream_name` | `BCI_RawEEG` | **Do not change** — downstream contract |
 | `pull_interval_ms` | `10` | BrainFlow ring-buffer poll interval |
@@ -263,7 +268,9 @@ stream produced by Layer 1, processes each sliding 2-second epoch through:
 1. **Notch filter** (60 Hz mains removal, Q = 35)
 2. **Bandpass filter** (5–45 Hz, 4th-order Butterworth)
 3. **Common Average Reference (CAR)** — reduces common-mode noise
-4. **Artefact gate** — drops epochs where any channel exceeds ±100 µV peak-to-peak
+4. **Artefact gate** — drops epochs when peak-to-peak (after filters) on the
+   evaluated channels exceeds ``artefact_threshold_uv``. Default YAML evaluates
+   occipital/PO rows only (``artefact_channel_indices``) so Pz/Cz do not veto SSVEP.
 5. **FBCCA classifier** — calibration-free frequency detection using 4 Chebyshev
    sub-bands and sklearn CCA
 6. **SNR gate** — only emits if signal-to-noise ratio ≥ 3.5 dB on Oz
@@ -298,12 +305,30 @@ python -m layer2_processing
 # Terminal 1 — emit a 12 Hz SSVEP sine on BCI_RawEEG_Test
 python scripts/synthetic_ssvep_source.py --frequency 12.0
 
+# …or a richer synthetic (spatial SSVEP, mains, alpha, drift, EMG-like spikes)
+python scripts/synthetic_ssvep_source.py --preset realistic --frequency 12.0
+
+# Aggressive artefacts + packet gaps for stress-testing Layer 2
+python scripts/synthetic_ssvep_source.py --preset stress --frequency 12.0
+
 # Terminal 2 — run Layer 2 pointing at the test stream
 python -m layer2_processing --stream-name BCI_RawEEG_Test
 
 # Terminal 3 (optional) — watch both transports
 python scripts/verify_layer2_output.py
 ```
+
+#### Artifact simulation (synthetic SSVEP)
+
+`scripts/synthetic_ssvep_source.py` can add **phenomenological** (not anatomically exact)
+artefacts before LSL: ADC clipping, electrode pops, simplified occipital blinks,
+EOG-like slow ramps, and **application-level** packet gaps (extra sleep with no
+`push_chunk`, while sample indices still advance so the consumer sees missing wall-clock
+data and a lower **measured** Hz). Use `--preset realistic` for mild defaults or
+`--preset stress` for aggressive rates plus packet gaps. Override any default with flags
+such as `--adc-clip-uv`, `--pop-rate-per-min`, `--blink-rate-per-min`,
+`--eog-ramp-peak-uv`, `--packet-loss-prob-chunk`, and `--packet-loss-mean-gap-ms`
+(`0` turns off clip / pops / blinks / EOG; packet loss uses probability `0`).
 
 ### CLI options
 
@@ -346,6 +371,15 @@ stimulus_frequencies_hz: [9.0, 10.0, 12.0, 15.0, 18.0, 30.0]
 Layer 3 (stimulus rendering) must publish the same list.  All other parameters
 (sub-band cutoffs, SNR threshold, epoch length, output ports) can be changed
 without touching any Python source.
+
+**Artefact gate:** if every epoch is rejected (`artefactual` equals `epochs` in
+health logs), peak-to-peak on at least one **evaluated** channel is above
+``artefact_threshold_uv``. With eight active EEG rows, Pz/Cz often breach a
+100 µV gate; default ``configs/layer2_default.yaml`` evaluates indices
+``[0, 1, 2, 3, 4, 5]`` (Oz through PO4) only. Set ``artefact_channel_indices:
+null`` to gate on all channels, or raise ``artefact_threshold_uv``. Health
+lines include ``last_max_ptp`` (max over all rows) and ``eval_max`` (max over
+evaluated rows only).
 
 ### Running the tests
 

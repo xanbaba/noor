@@ -11,6 +11,10 @@ bandpass_low_hz: 5
 bandpass_high_hz: 45
 bandpass_order: 4
 artefact_threshold_uv: 100.0
+# Peak-to-peak gate after notch+bandpass+CAR. Rows match cyton_default channel order.
+# Oz–PO4 (0–5) only: Pz/Cz often exceed 100 µV in real EEG and would reject every epoch.
+# Set to null to require all channels under the threshold.
+artefact_channel_indices: [0, 1, 2, 3, 4, 5]
 
 # --- Epoching ----------------------------------------------------------------
 epoch_length_s: 2.0

@@ -62,6 +62,31 @@ def test_load_valid_yaml(tmp_path):
     assert cfg.sample_rate_hz == 500
     assert cfg.stimulus_frequencies_hz == [9.0, 12.0, 15.0]
     assert cfg.classifier == "fbcca"
+    assert cfg.artefact_channel_indices is None
+
+
+def test_artefact_channel_indices_roundtrip(tmp_path):
+    y = _VALID_YAML + "\nartefact_channel_indices: [0, 1, 2]\n"
+    cfg = load_config(_write_yaml(tmp_path, y))
+    assert cfg.artefact_channel_indices == [0, 1, 2]
+
+
+def test_artefact_channel_indices_null(tmp_path):
+    y = _VALID_YAML + "\nartefact_channel_indices: null\n"
+    cfg = load_config(_write_yaml(tmp_path, y))
+    assert cfg.artefact_channel_indices is None
+
+
+def test_artefact_channel_indices_empty_rejected(tmp_path):
+    y = _VALID_YAML + "\nartefact_channel_indices: []\n"
+    with pytest.raises(ValueError, match="artefact_channel_indices"):
+        load_config(_write_yaml(tmp_path, y))
+
+
+def test_artefact_channel_indices_negative_rejected(tmp_path):
+    y = _VALID_YAML + "\nartefact_channel_indices: [0, -1]\n"
+    with pytest.raises(ValueError, match="artefact_channel_indices"):
+        load_config(_write_yaml(tmp_path, y))
 
 
 def test_derived_epoch_samples(tmp_path):

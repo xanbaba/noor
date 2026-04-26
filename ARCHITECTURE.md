@@ -2,7 +2,7 @@
 
 ---
 
-**Layer 1 — Data Acquisition** is unchanged in structure but gains specific BrainFlow board IDs, electrode placement detail (Oz, O1, O2, Pz with linked mastoid ground), and sampling rate guidance (250 Hz minimum; 500 Hz recommended for harmonic detection above 30 Hz).
+**Layer 1 — Data Acquisition** is unchanged in structure but gains specific BrainFlow board IDs, default 8-channel labels (occipital + parietal sites in `cyton_default.yaml`), and sampling rate guidance (250 Hz minimum; 500 Hz recommended for harmonic detection above 30 Hz).
 
 **Layer 2 — Signal Processing** is the most significantly enhanced section. The algorithm stack is now: notch filter (60 Hz) → bandpass (5–45 Hz, 4th-order Butterworth) → epoch windowing (1–4s sliding) → **Filter Bank CCA (FBCCA)** as the primary classifier, with TRCA as the high-accuracy fallback when calibration data is available. Specific sub-band definitions, harmonic sets, and SNR thresholds are included. Accuracy enhancement strategies include spatial filtering with CSP/xDAWN, ensemble voting across epoch lengths, and online drift correction.
 
@@ -16,7 +16,7 @@
 
 **Stack:** Python 3.11, BrainFlow 5.x (`BoardIds.CYTON_BOARD = 0`), Lab Streaming Layer (`pylsl`).
 
-**Hardware configuration.** Connect the OpenBCI Cyton (8-channel) via the USB dongle. Electrode placement: Oz (primary), O1, O2 (flanking occipital), Pz (parietal reference) using the 10–20 system. Link the right mastoid as ground (A2). This 4-electrode occipital cluster captures the visual cortex response most relevant to steady-state visual evoked potentials. Use conductive paste or active dry electrodes — contact impedance must be below 10 kΩ before acquisition begins. Impedance checking should be automated at session start.
+**Hardware configuration.** Connect the OpenBCI Cyton (8-channel) via the USB dongle. Default YAML labels: Oz, O1, O2, POz, PO3, PO4, Pz, Cz in Cyton CH1–8 order (edit to match your cap). Reference/ground wiring follows your OpenBCI montage (e.g. earlobe on SRB). Use conductive paste or active dry electrodes — every non-`--` channel is gated so impedance must be below the configured kΩ threshold before acquisition begins.
 
 **Sampling.** Set the Cyton to 500 Hz (BoardShim `set_log_level`, `prepare_session`, `start_stream`). 500 Hz is preferred over 250 Hz because it allows reliable harmonic extraction up to the third harmonic of 30 Hz stimuli without aliasing. Raw 24-bit samples are pushed directly to an LSL stream (`StreamOutlet`) with the channel format `float32` and stream type `EEG`. Include timestamp synchronisation using `local_clock()` at push time.
 

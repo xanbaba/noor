@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import yaml
@@ -52,6 +52,8 @@ class ProcessingConfig:
     inlet_resolve_timeout_s: float = 5.0
     inlet_pull_timeout_s: float = 0.05
     log_interval_s: int = 5
+    # If set, artefact gate uses peak-to-peak only on these LSL row indices; None = all.
+    artefact_channel_indices: Optional[list[int]] = None
 
     @property
     def epoch_length_samples(self) -> int:
@@ -106,6 +108,14 @@ class ProcessingConfig:
             raise ValueError("n_harmonics must be >= 1")
         if self.artefact_threshold_uv <= 0:
             raise ValueError("artefact_threshold_uv must be > 0")
+        if self.artefact_channel_indices is not None:
+            if not self.artefact_channel_indices:
+                raise ValueError("artefact_channel_indices must be non-empty when set")
+            for i in self.artefact_channel_indices:
+                if i < 0:
+                    raise ValueError(
+                        f"artefact_channel_indices must be >= 0; got {self.artefact_channel_indices}"
+                    )
         if self.snr_channel_index < 0:
             raise ValueError("snr_channel_index must be >= 0")
 
@@ -120,6 +130,12 @@ def load_config(
 
     if overrides:
         raw.update({k: v for k, v in overrides.items() if v is not None})
+
+    aci_raw = raw.get("artefact_channel_indices", None)
+    if aci_raw is None:
+        artefact_channel_indices = None
+    else:
+        artefact_channel_indices = [int(i) for i in aci_raw]
 
     cfg = ProcessingConfig(
         lsl_stream_name=str(raw["lsl_stream_name"]),
@@ -150,6 +166,7 @@ def load_config(
         inlet_resolve_timeout_s=float(raw.get("inlet_resolve_timeout_s", 5.0)),
         inlet_pull_timeout_s=float(raw.get("inlet_pull_timeout_s", 0.05)),
         log_interval_s=int(raw.get("log_interval_s", 5)),
+        artefact_channel_indices=artefact_channel_indices,
     )
     cfg.validate()
     return cfg

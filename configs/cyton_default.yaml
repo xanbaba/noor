@@ -11,17 +11,17 @@ sample_rate_hz: 500
 # Total channels exposed by the board (Cyton = 8).
 channel_count: 8
 
-# Electrode labels in channel order (use "--" for unused channels).
-# Electrode placement follows the 10-20 system; occipital cluster for SSVEP.
+# Electrode labels in Cyton channel order (BrainFlow row 0 = Cyton CH1).
+# Cap mapping (example 8-channel montage): np1→CH1 … np8→CH8; SRB → right earlobe.
 channel_labels:
-  - Oz   # ch1 – primary occipital
-  - O1   # ch2 – left occipital
-  - O2   # ch3 – right occipital
-  - Pz   # ch4 – parietal reference
-  - "--"  # ch5
-  - "--"  # ch6
-  - "--"  # ch7
-  - "--"  # ch8
+  - Oz    # np1 / CH1 — primary occipital (SNR gate uses this row by default)
+  - O1    # np2 / CH2
+  - O2    # np3 / CH3
+  - POz   # np4 / CH4
+  - PO3   # np5 / CH5
+  - PO4   # np6 / CH6
+  - Pz    # np7 / CH7
+  - Cz    # np8 / CH8
 
 # Maximum allowed electrode–skin contact impedance in kΩ.
 # BCI session is blocked until all active (non-"--") channels meet this threshold.

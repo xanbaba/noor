@@ -53,6 +53,10 @@ class Preprocessor:
         )
 
         self._artefact_uv = float(cfg.artefact_threshold_uv)
+        if cfg.artefact_channel_indices is None:
+            self._artefact_idx = None
+        else:
+            self._artefact_idx = np.asarray(cfg.artefact_channel_indices, dtype=np.intp)
 
     def filter(self, epoch: np.ndarray) -> np.ndarray:
         """Notch → bandpass → common-average reference. Returns float32 copy."""
@@ -73,9 +77,14 @@ class Preprocessor:
     def process(self, epoch: np.ndarray) -> EpochResult:
         clean = self.filter(epoch)
         ptp = self.peak_to_peak(clean)
+        if self._artefact_idx is None:
+            ptp_eval = ptp
+        else:
+            idx = self._artefact_idx[self._artefact_idx < ptp.shape[0]]
+            ptp_eval = ptp if idx.size == 0 else ptp[idx]
         return EpochResult(
             data=clean,
-            artefactual=bool((ptp > self._artefact_uv).any()),
+            artefactual=bool((ptp_eval > self._artefact_uv).any()),
             peak_to_peak_uv=ptp,
         )
 
