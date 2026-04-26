@@ -15,8 +15,19 @@ _VALID_YAML = textwrap.dedent("""\
     layer2_ws_url: ws://localhost:9001
     host: localhost
     port: 8000
-    stimulus_frequencies_hz: [12.0, 15.0]
+    stimulus_frequencies_hz: [6.0, 20.0]
     static_dir: static
+    phrases:
+      - id: water
+        label: Water, please
+        frequency_hz: 6.0
+        color: '#00e5ff'
+        utterance: Water.
+      - id: pain
+        label: Pain
+        frequency_hz: 20.0
+        color: '#ff3d71'
+        utterance: I am in pain.
 """)
 
 
@@ -28,13 +39,16 @@ def _write_yaml(tmp_path: Path, content: str) -> Path:
 
 # ── Happy path ────────────────────────────────────────────────────────
 
+
 def test_load_valid_yaml(tmp_path):
     cfg = load_config(_write_yaml(tmp_path, _VALID_YAML))
     assert isinstance(cfg, BackendConfig)
     assert cfg.host == "localhost"
     assert cfg.port == 8000
     assert cfg.layer2_ws_url == "ws://localhost:9001"
-    assert cfg.stimulus_frequencies_hz == [12.0, 15.0]
+    assert cfg.stimulus_frequencies_hz == [6.0, 20.0]
+    assert len(cfg.phrases) == 2
+    assert cfg.phrases[0].id == "water"
 
 
 def test_override_applies(tmp_path):
@@ -50,10 +64,14 @@ def test_default_config_file_loads():
     if not default.exists():
         pytest.skip("configs/layer3_default.yaml not present — run from project root")
     cfg = load_config(default)
-    assert cfg.stimulus_frequencies_hz
+    assert cfg.stimulus_frequencies_hz == [6.0, 20.0]
+    assert len(cfg.phrases) == 2
+    ids = {p.id for p in cfg.phrases}
+    assert ids == {"action_select", "action_next"}
 
 
 # ── Validation ────────────────────────────────────────────────────────
+
 
 def _bad_yaml(tmp_path: Path, **overrides) -> Path:
     raw = yaml.safe_load(_VALID_YAML)
@@ -74,3 +92,27 @@ def test_invalid_port_rejected(tmp_path):
 def test_empty_frequencies_rejected(tmp_path):
     with pytest.raises(ValueError, match="stimulus_frequencies_hz"):
         load_config(_bad_yaml(tmp_path, stimulus_frequencies_hz=[]))
+
+
+def test_phrase_frequency_not_in_stimulus_rejected(tmp_path):
+    raw = yaml.safe_load(_VALID_YAML)
+    raw["phrases"] = [
+        {
+            "id": "x",
+            "label": "X",
+            "frequency_hz": 99.0,
+            "color": "#fff",
+            "utterance": "no",
+        }
+    ]
+    p = _write_yaml(tmp_path, yaml.dump(raw))
+    with pytest.raises(ValueError, match="frequency_hz"):
+        load_config(p)
+
+
+def test_missing_phrases_key_errors(tmp_path):
+    raw = yaml.safe_load(_VALID_YAML)
+    del raw["phrases"]
+    p = _write_yaml(tmp_path, yaml.dump(raw))
+    with pytest.raises(ValueError, match="phrases"):
+        load_config(p)

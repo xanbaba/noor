@@ -33,7 +33,7 @@ _VALID_YAML = textwrap.dedent("""\
     weight_a: 1.25
     weight_b: 0.25
     n_harmonics: 3
-    stimulus_frequencies_hz: [9.0, 12.0, 15.0]
+    stimulus_frequencies_hz: [6.0, 9.0, 20.0]
     snr_min_db: 3.5
     snr_noise_band_hz: 1.0
     snr_channel_index: 0
@@ -60,7 +60,7 @@ def test_load_valid_yaml(tmp_path):
     assert isinstance(cfg, ProcessingConfig)
     assert cfg.lsl_stream_name == "BCI_RawEEG"
     assert cfg.sample_rate_hz == 500
-    assert cfg.stimulus_frequencies_hz == [9.0, 12.0, 15.0]
+    assert cfg.stimulus_frequencies_hz == [6.0, 9.0, 20.0]
     assert cfg.classifier == "fbcca"
     assert cfg.artefact_channel_indices is None
     assert cfg.snr_gate_enabled is True
@@ -123,6 +123,7 @@ def test_default_config_file_loads():
     assert cfg.snr_aggregate == "max"
     assert cfg.use_car is False
     assert cfg.snr_gate_enabled is True
+    assert cfg.stimulus_frequencies_hz == [6.0, 20.0]
 
 
 def test_minimal_config_loads():
@@ -191,6 +192,39 @@ def test_snr_gate_enabled_roundtrip(tmp_path):
 def test_artefact_penalty_out_of_range_rejected(tmp_path):
     y = _VALID_YAML + "\nartefact_penalty: 0\n"
     with pytest.raises(ValueError, match="artefact_penalty"):
+        load_config(_write_yaml(tmp_path, y))
+
+
+def test_enable_6_20_weighting_requires_weight_vectors(tmp_path):
+    y = _VALID_YAML + "\nenable_6_20_weighting: true\n"
+    with pytest.raises(ValueError, match="weights_6hz_by_channel"):
+        load_config(_write_yaml(tmp_path, y))
+
+
+def test_enable_6_20_weighting_roundtrip(tmp_path):
+    y = _VALID_YAML + textwrap.dedent(
+        """
+        enable_6_20_weighting: true
+        weights_6hz_by_channel: [1, 1, 1, 1, 1, 1.2, 1, 1]
+        weights_20hz_by_channel: [1, 1, 1, 1, 1, 1.1, 1, 1]
+        """
+    )
+    cfg = load_config(_write_yaml(tmp_path, y))
+    assert cfg.enable_6_20_weighting is True
+    assert cfg.weights_6hz_by_channel is not None
+    assert cfg.weights_20hz_by_channel is not None
+    assert len(cfg.weights_6hz_by_channel) == 8
+
+
+def test_decision_confidence_bounds_rejected(tmp_path):
+    y = _VALID_YAML + "\ndecision_confidence_min: 1.5\n"
+    with pytest.raises(ValueError, match="decision_confidence_min"):
+        load_config(_write_yaml(tmp_path, y))
+
+
+def test_decision_no_decision_command_nonempty(tmp_path):
+    y = _VALID_YAML + "\ndecision_no_decision_command: '   '\n"
+    with pytest.raises(ValueError, match="decision_no_decision_command"):
         load_config(_write_yaml(tmp_path, y))
 
 

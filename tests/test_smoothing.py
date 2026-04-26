@@ -8,15 +8,15 @@ from layer2_processing.smoothing import smoothed_frequency_hz
 
 
 def test_mode_single_value():
-    assert smoothed_frequency_hz([12.0]) == 12.0
+    assert smoothed_frequency_hz([6.0]) == 6.0
 
 
 def test_mode_clear_winner():
-    assert smoothed_frequency_hz([12.0, 12.0, 15.0, 12.0]) == 12.0
+    assert smoothed_frequency_hz([6.0, 6.0, 20.0, 6.0]) == 6.0
 
 
 def test_tie_prefers_most_recent():
-    assert smoothed_frequency_hz([12.0, 15.0, 12.0, 15.0]) == 15.0
+    assert smoothed_frequency_hz([6.0, 20.0, 6.0, 20.0]) == 20.0
 
 
 def test_empty_raises():

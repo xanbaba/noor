@@ -44,10 +44,8 @@ weight_b: 0.25
 n_harmonics: 3
 
 # Fully config-driven stimulus set — Layer 3 must publish the same list.
-# Narrowed to two 60 Hz divisors for the laptop browser MVP (12 Hz = 5-frame
-# period, 15 Hz = 4-frame period).  Widen to the full Quest 3 set
-# [9, 10, 12, 15, 18, 30] (90 Hz divisors) when the VR frontend lands.
-stimulus_frequencies_hz: [12.0, 15.0]
+# Two 60 Hz–locked targets: 6 Hz (SELECT) vs 15 Hz (NEXT); wide spectral gap for FBCCA.
+stimulus_frequencies_hz: [6.0, 15.0]
 
 # --- SNR gate ----------------------------------------------------------------
 snr_min_db: 3.5
@@ -64,6 +62,22 @@ snr_adaptive_floor_db: 2.5
 # --- Temporal smoothing ------------------------------------------------------
 # Majority vote over the last N classifier frequencies that passed SNR (0 or 1 = off).
 prediction_smoothing_window: 4
+
+# --- Optional 6 Hz / 15 Hz binary channel weighting --------------------------
+# Set true when your UI presents only 6 Hz vs 15 Hz options.
+enable_6_15_weighting: false
+# Per-channel weights in LSL row order. Keep mean around 1.0 and increase C3
+# slightly (e.g. 1.2) if it is consistently stronger for your participant.
+# weights_6hz_by_channel: [1, 1, 1, 1, 1, 1.2, 1, 1]
+# weights_15hz_by_channel: [1, 1, 1, 1, 1, 1.1, 1, 1]
+
+# --- Confidence-gated adaptive decision extension ----------------------------
+# If confidence is below threshold, defer for up to N extra epochs.
+decision_confidence_min: 0.0
+decision_max_extra_epochs: 0
+# Optional fallback event if still low confidence after max extra epochs.
+decision_emit_no_decision: false
+decision_no_decision_command: NO_DECISION
 
 # --- Outputs -----------------------------------------------------------------
 websocket_host: localhost

@@ -27,7 +27,7 @@ sub_band_filter_order: 5
 weight_a: 1.25
 weight_b: 0.25
 n_harmonics: 3
-stimulus_frequencies_hz: [12.0, 15.0]
+stimulus_frequencies_hz: [6.0, 15.0]
 
 snr_min_db: 3.5
 snr_noise_band_hz: 1.0

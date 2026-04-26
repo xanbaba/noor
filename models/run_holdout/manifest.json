@@ -1,0 +1,25 @@
+{
+  "model": "sklearn",
+  "classes_hz": [
+    "12",
+    "15"
+  ],
+  "sample_rate_hz": 500.0,
+  "n_train": 20,
+  "n_val": 20,
+  "n_test": 20,
+  "test_metrics": {
+    "balanced_accuracy": 0.15,
+    "macro_f1": 0.13043478260869565
+  },
+  "confusion_matrix": [
+    [
+      0,
+      10
+    ],
+    [
+      7,
+      3
+    ]
+  ]
+}

@@ -19,6 +19,7 @@ dependencies = [
     "websockets~=12.0",
     "fastapi~=0.115",
     "uvicorn~=0.30",
+    "httpx~=0.27",
 ]
 
 [project.optional-dependencies]
@@ -26,10 +27,15 @@ dev = [
     "pytest~=8.0",
     "pytest-asyncio~=0.23",
 ]
+experiments = [
+    "pygame>=2.5",
+    "torch>=2.2",
+    "matplotlib>=3.8",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["layer1_acquisition*", "layer2_processing*", "layer3_backend*"]
+include = ["layer1_acquisition*", "layer2_processing*", "layer3_backend*", "experiments*"]
 
 [tool.setuptools.package-data]
 "layer3_backend" = ["static/*"]

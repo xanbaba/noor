@@ -149,6 +149,10 @@ disk):
 python -m layer1_acquisition --config configs/cyton_default.yaml --board synthetic --skip-impedance --raw-eeg-log recordings/run.csv
 ```
 
+### Supervised 6 Hz vs 15 Hz (offline dataset and model)
+
+For joint acquisition + flicker recording, epoch building, baseline or CNN training, and a small inference helper, see [experiments/ssvep_ml/README.md](experiments/ssvep_ml/README.md) and [experiments/ssvep_ml/PROTOCOL.md](experiments/ssvep_ml/PROTOCOL.md). Install extras with `pip install -e ".[experiments]"` when using pygame or torch.
+
 ### CLI options
 
 | Flag | Default | Description |
@@ -344,14 +348,14 @@ python -m layer2_processing
 **With the synthetic SSVEP source (no Cyton required):**
 
 ```powershell
-# Terminal 1 — emit a 12 Hz SSVEP sine on BCI_RawEEG_Test
-python scripts/synthetic_ssvep_source.py --frequency 12.0
+# Terminal 1 — emit a 6 Hz SSVEP sine on BCI_RawEEG_Test
+python scripts/synthetic_ssvep_source.py --frequency 6.0
 
 # …or a richer synthetic (spatial SSVEP, mains, alpha, drift, EMG-like spikes)
-python scripts/synthetic_ssvep_source.py --preset realistic --frequency 12.0
+python scripts/synthetic_ssvep_source.py --preset realistic --frequency 6.0
 
 # Aggressive artefacts + packet gaps for stress-testing Layer 2
-python scripts/synthetic_ssvep_source.py --preset stress --frequency 12.0
+python scripts/synthetic_ssvep_source.py --preset stress --frequency 6.0
 
 # Terminal 2 — run Layer 2 pointing at the test stream
 python -m layer2_processing --stream-name BCI_RawEEG_Test
@@ -387,7 +391,7 @@ Both WebSocket (`ws://localhost:9001`, broadcast) and OSC (`/bci/command` UDP
 to `127.0.0.1:9000`) emit identical JSON payloads:
 
 ```json
-{"command":"SELECT","frequency":12.0,"snr_db":4.1,"confidence":0.87,"epoch_ms":2000}
+{"command":"SELECT","frequency":6.0,"snr_db":4.1,"confidence":0.87,"epoch_ms":2000}
 ```
 
 | Field | Type | Description |
@@ -407,7 +411,7 @@ All stimulus frequencies are fully configuration-driven — there are no
 hard-coded values in the classifier code:
 
 ```yaml
-stimulus_frequencies_hz: [9.0, 10.0, 12.0, 15.0, 18.0, 30.0]
+stimulus_frequencies_hz: [6.0, 15.0]
 ```
 
 Layer 3 (stimulus rendering) must publish the same list.  All other parameters
@@ -454,9 +458,14 @@ A thin FastAPI server that:
 
 1. Subscribes to Layer 2's WebSocket on `:9001` (the bridge).
 2. Re-broadcasts every `SELECT` payload to all connected browser clients.
-3. Serves a single-page SSVEP frontend with two flickering tiles (12 Hz,
-   15 Hz) and a live status panel showing detected frequency, SNR, and
-   confidence.
+3. After **five consecutive** `SELECT` messages with the **same** decoded
+   frequency (0.1 Hz normalised), emits an extra WebSocket JSON object
+   `{"type":"confirmed",...}` so the UI can treat the choice as deliberate.
+4. Serves a single-page SSVEP **phrase** UI: tiles and flicker frequencies come
+   from `phrases` in `configs/layer3_default.yaml` (must match Layer 2
+   `stimulus_frequencies_hz`).
+5. **`POST /api/speak`** calls ElevenLabs TTS for a configured `phrase_id`
+   (API key via environment variable; never commit keys).
 
 This is the **MVP** — no spelling, no navigation, no AI predictor.  The
 `AbstractClassifier` interface and the `stimulus_frequencies_hz` config field
@@ -468,12 +477,20 @@ exist so full speller pages can be added later without restructuring.
 |---|---|
 | `fastapi~=0.115` | HTTP + WebSocket server |
 | `uvicorn~=0.30` | ASGI server to host FastAPI |
+| `httpx~=0.27` | Async HTTP client for ElevenLabs TTS |
+
+### ElevenLabs (optional speech)
+
+| Environment variable | Description |
+|---|---|
+| `ELEVENLABS_API_KEY` | Required for `POST /api/speak` to return audio; if unset, the endpoint returns HTTP 503. |
+| `ELEVENLABS_VOICE_ID` | Optional override for the voice id (YAML `elevenlabs_voice_id` is the default). |
 
 ### Running the full stack (no Cyton)
 
 ```powershell
-# Terminal 1 — synthetic 12 Hz SSVEP on BCI_RawEEG_Test
-python scripts/synthetic_ssvep_source.py --frequency 12.0
+# Terminal 1 — synthetic 6 Hz SSVEP on BCI_RawEEG_Test
+python scripts/synthetic_ssvep_source.py --frequency 6.0
 
 # Terminal 2 — Layer 2 pipeline
 python -m layer2_processing --stream-name BCI_RawEEG_Test
@@ -484,9 +501,10 @@ python -m layer3_backend
 # Browser — open http://localhost:8000
 ```
 
-You should see two large flickering tiles (12 Hz and 15 Hz).  The status
-panel updates ~2x/sec with the detected frequency, SNR, and confidence.
-The tile matching the detected frequency briefly highlights on each emission.
+You should see two flicker targets (6 Hz = SELECT, 15 Hz = NEXT by default).  The
+status panel updates with each `SELECT`.  After **five** matching detections
+in a row for one frequency, the server sends a `confirmed` event and the
+browser requests TTS for that phrase (if `ELEVENLABS_API_KEY` is set).
 
 ### Layer 3 CLI options
 
@@ -504,25 +522,27 @@ The tile matching the detected frequency briefly highlights on each emission.
 |---|---|---|
 | `/` | GET | Serves the SSVEP flicker page (`index.html`) |
 | `/health` | GET | Returns `{"ok": true}` |
-| `/config` | GET | Returns `{"stimulus_frequencies_hz": [12.0, 15.0]}` |
-| `/ws` | WS | Browser clients connect here; receives re-broadcast SELECT payloads |
+| `/config` | GET | Returns `stimulus_frequencies_hz` and `phrases` for the UI |
+| `/api/speak` | POST | Body `{"phrase_id":"water"}` → `audio/mpeg` (ElevenLabs) |
+| `/ws` | WS | Browser clients; receives each Layer 2 `SELECT` plus `type: confirmed` |
 
 ### Frequency note (60 Hz laptop)
 
-The MVP uses `[12.0, 15.0]` Hz — both are exact divisors of 60 Hz (5-frame
-and 4-frame periods respectively).  When moving to the Meta Quest 3 (90 Hz),
-widen the list to `[9, 10, 12, 15, 18, 30]` in both `configs/layer2_default.yaml`
-and `configs/layer3_default.yaml`.
+The default browser stack uses `[6.0, 15.0]` Hz (SELECT / NEXT; both divide 60 Hz
+evenly).  When retuning, keep `stimulus_frequencies_hz` aligned in
+`configs/layer2_default.yaml` and `configs/layer3_default.yaml`, update `phrases`, and
+match the flicker frequencies in `layer3_backend/static/app.js`.
 
 ### Layer 3 tests
 
 ```powershell
 python -m pytest tests/test_layer3_config.py tests/test_layer3_bridge.py \
-                 tests/test_layer3_server.py -v
+                 tests/test_layer3_server.py tests/test_confirmation.py -v
 ```
 
 | Test module | What it covers |
 |---|---|
 | `test_layer3_config.py` | YAML loading, validation, overrides |
-| `test_layer3_bridge.py` | Broadcaster, bridge receive + reconnect, clean shutdown |
-| `test_layer3_server.py` | `/`, `/health`, `/config` endpoints via httpx |
+| `test_layer3_bridge.py` | Broadcaster, bridge receive + reconnect, 5× confirmation |
+| `test_layer3_server.py` | `/`, `/health`, `/config`, `/api/speak` via httpx |
+| `test_confirmation.py` | Consecutive-frequency streak logic |

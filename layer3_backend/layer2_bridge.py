@@ -15,6 +15,9 @@ from typing import Any
 
 import websockets
 
+from layer3_backend.config import PhraseCard
+from layer3_backend.confirmation import StreakTracker
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,9 +67,13 @@ class Layer2Bridge:
         self,
         upstream_url: str,
         broadcaster: Broadcaster,
+        phrase_by_norm_frequency: dict[float, PhraseCard] | None = None,
+        streak_required: int = 5,
     ) -> None:
         self._url = upstream_url
         self._broadcaster = broadcaster
+        self._phrase_by_freq = phrase_by_norm_frequency or {}
+        self._streak = StreakTracker(required=streak_required)
         self._stop = asyncio.Event()
         self._task: asyncio.Task | None = None
 
@@ -104,6 +111,7 @@ class Layer2Bridge:
                             logger.warning("Non-JSON from Layer 2: %s", message[:80])
                             continue
                         await self._broadcaster.broadcast(payload)
+                        await self._maybe_broadcast_confirmed(payload)
             except asyncio.CancelledError:
                 return
             except (OSError, websockets.WebSocketException) as exc:
@@ -122,3 +130,30 @@ class Layer2Bridge:
                 except asyncio.TimeoutError:
                     pass
                 backoff = min(backoff * 2, 5.0)
+
+    async def _maybe_broadcast_confirmed(self, payload: dict[str, Any]) -> None:
+        if payload.get("command") != "SELECT":
+            return
+        freq = payload.get("frequency")
+        if not isinstance(freq, (int, float)):
+            return
+        if not self._phrase_by_freq:
+            return
+        confirmed_f = self._streak.feed(float(freq))
+        if confirmed_f is None:
+            return
+        card = self._phrase_by_freq.get(confirmed_f)
+        if card is None:
+            logger.debug(
+                "Confirmed frequency %.1f Hz has no phrase card; skipping extra WS",
+                confirmed_f,
+            )
+            return
+        confirmed_msg = {
+            "type": "confirmed",
+            "phrase_id": card.id,
+            "frequency_hz": confirmed_f,
+            "utterance": card.utterance,
+            "streak": self._streak.required,
+        }
+        await self._broadcaster.broadcast(confirmed_msg)

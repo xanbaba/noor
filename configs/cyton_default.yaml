@@ -1,42 +1,27 @@
-# OpenBCI Cyton — Layer 1 acquisition configuration
+# Cyton + 19-site cap: pick 8 EEG inputs for SSVEP (no Oz on silkscreen — use O1/O2 + Pz ring).
+# Use with ``configs/layer2_headset_19el_8ch_ssvep.yaml`` for matching SNR + artefact rows.
 board: cyton
-
-# Serial port for the Cyton USB dongle.
-# Set to "auto" to let the driver detect the first matching VID/PID.
 serial_port: auto
-
-# BrainFlow sample rate.  500 Hz is required to capture harmonics up to 3×30 Hz.
-sample_rate_hz: 500
-
-# Total channels exposed by the board (Cyton = 8).
+sample_rate_hz: 250
 channel_count: 8
 
-# Electrode labels in Cyton channel order (BrainFlow row 0 = Cyton CH1).
-# Cap mapping (example 8-channel montage): np1→CH1 … np8→CH8; SRB → right earlobe.
+# Plug N1P…N8P (CH1…CH8) in this order. GND / REF go to the Cyton bias pins per OpenBCI docs
+# (not counted in these eight signal rows).
 channel_labels:
-  - Oz    # np1 / CH1 — primary occipital (SNR gate uses this row by default)
-  - O1    # np2 / CH2
-  - O2    # np3 / CH3
-  - POz   # np4 / CH4
-  - PO3   # np5 / CH5
-  - PO4   # np6 / CH6
-  - Pz    # np7 / CH7
-  - Cz    # np8 / CH8
+  - O1   # CH1 — primary SSVEP / SNR row (see layer2 snr_channel_index)
+  - O2   # CH2
+  - Pz   # CH3 — midline parietal (cap label PZ)
+  - P3   # CH4
+  - P4   # CH5
+  - C3   # CH6
+  - C4   # CH7
+  - T5   # CH8 — posterior temporal (swap T5↔T6 if your cap routing prefers T6)
 
-# Maximum allowed electrode–skin contact impedance in kΩ.
-# BCI session is blocked until all active (non-"--") channels meet this threshold.
 impedance_max_kohm: 10.0
-
-# LSL stream identifiers — downstream layers discover the stream by name only.
 lsl_stream_name: BCI_RawEEG
 lsl_stream_type: EEG
-
-# Acquisition loop pull interval in milliseconds.
 pull_interval_ms: 10
-
-# How often the acquisition loop logs a health summary (seconds).
 log_interval_s: 5
 
-# Optional: append raw EEG (same float32 µV chunks as LSL) to a CSV file.
-# raw_eeg_log_path: recordings/session.csv
-# raw_eeg_log_format: csv
+raw_eeg_log_path: recordings/session.csv
+raw_eeg_log_format: csv

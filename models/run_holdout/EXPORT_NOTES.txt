@@ -1,0 +1,1 @@
+Real-time integration (future): load_bundle(model_dir) once, then call predict_proba(bundle, epoch) on each Layer-2-sized window. For Layer 2, implement a new AbstractClassifier that wraps predict_proba or TorchScript export of TinyEegCNN.

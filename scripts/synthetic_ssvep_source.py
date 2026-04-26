@@ -26,9 +26,9 @@ Packet gap          ``--packet-loss-prob-chunk``, ``--packet-loss-mean-gap-ms``
 
 Usage::
 
-    python scripts/synthetic_ssvep_source.py --frequency 12.0 --duration 60
+    python scripts/synthetic_ssvep_source.py --frequency 6.0 --duration 60
 
-    python scripts/synthetic_ssvep_source.py --preset realistic --frequency 12.0
+    python scripts/synthetic_ssvep_source.py --preset realistic --frequency 6.0
 
     python scripts/synthetic_ssvep_source.py --frequencies 12 15 --frequency-switch-s 3
 
@@ -199,8 +199,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--frequency",
         type=float,
-        default=12.0,
-        help="Single stimulus frequency in Hz on Oz (default: 12.0). "
+        default=6.0,
+        help="Single stimulus frequency in Hz on Oz (default: 6.0). "
         "Ignored if --frequencies is set.",
     )
     p.add_argument(

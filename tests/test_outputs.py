@@ -21,7 +21,7 @@ from layer2_processing.outputs.websocket_emitter import WebSocketEmitter
 
 _PAYLOAD = {
     "command": "SELECT",
-    "frequency": 12.0,
+    "frequency": 6.0,
     "snr_db": 5.3,
     "confidence": 0.82,
     "epoch_ms": 2000,
@@ -77,7 +77,7 @@ class TestWebSocketEmitter:
         assert len(received) == 1
         parsed = json.loads(received[0])
         assert parsed["command"] == "SELECT"
-        assert parsed["frequency"] == 12.0
+        assert parsed["frequency"] == 6.0
 
     def test_multiple_clients_all_receive(self):
         port = _free_port()
@@ -159,7 +159,7 @@ class TestOscEmitter:
         assert start >= 0 and end > start, "No JSON object found in OSC packet"
         parsed = json.loads(data[start:end])
         assert parsed["command"] == "SELECT"
-        assert parsed["frequency"] == 12.0
+        assert parsed["frequency"] == 6.0
 
     def test_address_property(self):
         emitter = OscEmitter(address="/test/addr")

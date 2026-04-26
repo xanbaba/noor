@@ -9,7 +9,7 @@ Usage::
     emitter = WebSocketEmitter(host="localhost", port=9001)
     emitter.start()
     try:
-        emitter.emit({"command": "SELECT", "frequency": 12.0, ...})
+        emitter.emit({"command": "SELECT", "frequency": 6.0, ...})
     finally:
         emitter.stop()
 """

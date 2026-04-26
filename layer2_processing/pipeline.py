@@ -5,7 +5,7 @@ gate → WebSocket / OSC emitters.
 
 Output payload (frozen, per ARCHITECTURE §2.4)::
 
-    {"command":"SELECT","frequency":12.0,"snr_db":4.1,"confidence":0.87,"epoch_ms":2000}
+    {"command":"SELECT","frequency":6.0,"snr_db":4.1,"confidence":0.87,"epoch_ms":2000}
 """
 
 from __future__ import annotations
@@ -17,7 +17,9 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from layer2_processing.classifiers.base import AbstractClassifier
+import numpy as np
+
+from layer2_processing.classifiers.base import AbstractClassifier, ClassifierResult
 from layer2_processing.classifiers.factory import create_classifier
 from layer2_processing.config import ProcessingConfig
 from layer2_processing.logging_config import get_logger
@@ -39,6 +41,7 @@ class PipelineStats:
     epochs_artefactual: int = 0
     epochs_below_snr: int = 0
     commands_emitted: int = 0
+    no_decisions_emitted: int = 0
     # Peak-to-peak (µV, max over channels) after filters on the last processed epoch
     last_max_ptp_uv: float = 0.0
 
@@ -95,6 +98,15 @@ class Pipeline:
         sw = int(cfg.prediction_smoothing_window)
         self._smooth_maxlen = max(1, sw) if sw > 1 else 0
         self._freq_window: deque[float] = deque(maxlen=self._smooth_maxlen or 1)
+        self._freqs = [float(f) for f in cfg.stimulus_frequencies_hz]
+
+        # Adaptive decision extension state (confidence gating across epochs).
+        self._decision_log_scores: np.ndarray | None = None
+        self._decision_epochs = 0
+
+        # Log one-time warnings for channel-weight vector shape mismatch.
+        self._warned_w6_shape = False
+        self._warned_w15_shape = False
 
     def stop(self) -> None:
         self._stop.set()
@@ -123,13 +135,16 @@ class Pipeline:
             else f"SNR≥{self._cfg.snr_min_db:.1f} dB"
         )
         logger.info(
-            "Pipeline running | epoch=%.2fs/%.2fs | freqs=%s | %s | artefact=%s | CAR=%s",
+            "Pipeline running | epoch=%.2fs/%.2fs | freqs=%s | %s | artefact=%s | CAR=%s | conf_min=%.2f | max_extra=%d | w6_15=%s",
             self._cfg.epoch_length_s,
             self._cfg.epoch_step_s,
             self._cfg.stimulus_frequencies_hz,
             snr_line,
             self._cfg.artefact_policy,
             self._cfg.use_car,
+            self._cfg.decision_confidence_min,
+            self._cfg.decision_max_extra_epochs,
+            self._cfg.enable_6_15_weighting,
         )
 
         try:
@@ -147,11 +162,12 @@ class Pipeline:
             pass
         finally:
             logger.info(
-                "Pipeline exit | epochs=%d | artefactual=%d | snr_rejected=%d | emitted=%d",
+                "Pipeline exit | epochs=%d | artefactual=%d | snr_rejected=%d | emitted=%d | no_decision=%d",
                 self.stats.epochs_seen,
                 self.stats.epochs_artefactual,
                 self.stats.epochs_below_snr,
                 self.stats.commands_emitted,
+                self.stats.no_decisions_emitted,
             )
 
     def _handle_epoch(self, epoch) -> None:
@@ -186,6 +202,7 @@ class Pipeline:
                 )
 
         prediction = self._classifier.predict(result.data)
+        prediction = self._predict_with_optional_6_15_weighting(result.data, prediction)
         snr_db = self._compute_snr_db(result.data, prediction.frequency_hz)
 
         if self._cfg.snr_gate_enabled:
@@ -206,10 +223,42 @@ class Pipeline:
                 self._consecutive_snr_rejects = 0
 
         confidence = float(prediction.confidence)
+        raw_scores = np.asarray(prediction.raw_scores, dtype=np.float64)
         if result.artefactual and self._cfg.artefact_policy == "penalize":
             confidence *= float(self._cfg.artefact_penalty)
+            raw_scores = raw_scores * float(self._cfg.artefact_penalty)
 
-        raw_freq = float(prediction.frequency_hz)
+        # Optionally defer low-confidence decisions for up to N extra epochs.
+        emit_now, no_decision, decided_freq, decided_conf = self._decision_gate(
+            raw_scores=raw_scores,
+            fallback_freq=float(prediction.frequency_hz),
+            fallback_conf=confidence,
+        )
+        if not emit_now:
+            return
+
+        if no_decision:
+            payload = build_payload(
+                frequency_hz=decided_freq,
+                snr_db=snr_db,
+                confidence=decided_conf,
+                epoch_ms=self._epoch_ms,
+                command=self._cfg.decision_no_decision_command,
+            )
+            self._emit(payload)
+            self.stats.commands_emitted += 1
+            self.stats.no_decisions_emitted += 1
+            logger.info(
+                "%s | freq=%.2f Hz | SNR=%.2f dB | conf=%.2f",
+                self._cfg.decision_no_decision_command,
+                decided_freq,
+                snr_db,
+                decided_conf,
+            )
+            return
+
+        raw_freq = float(decided_freq)
+        confidence = float(decided_conf)
         if self._smooth_maxlen <= 1:
             out_freq = raw_freq
         else:
@@ -232,6 +281,192 @@ class Pipeline:
             snr_db,
             confidence,
         )
+
+    def _find_freq_index(self, target_hz: float) -> int | None:
+        for i, f in enumerate(self._freqs):
+            if abs(float(f) - float(target_hz)) < 1e-6:
+                return i
+        return None
+
+    def _fit_channel_weights(
+        self,
+        raw_weights: list[float] | None,
+        n_channels: int,
+        which: str,
+    ) -> np.ndarray:
+        # Default: equal channel contribution.
+        if raw_weights is None:
+            return np.ones(n_channels, dtype=np.float64)
+
+        arr = np.asarray(raw_weights, dtype=np.float64)
+        if arr.size == n_channels:
+            pass
+        elif arr.size < n_channels:
+            pad = np.ones(n_channels - arr.size, dtype=np.float64)
+            arr = np.concatenate([arr, pad], axis=0)
+            if which == "6" and not self._warned_w6_shape:
+                logger.warning(
+                    "weights_6hz_by_channel length=%d does not match channels=%d; padded with 1.0",
+                    arr.size - pad.size,
+                    n_channels,
+                )
+                self._warned_w6_shape = True
+            if which == "15" and not self._warned_w15_shape:
+                logger.warning(
+                    "weights_15hz_by_channel length=%d does not match channels=%d; padded with 1.0",
+                    arr.size - pad.size,
+                    n_channels,
+                )
+                self._warned_w15_shape = True
+        else:
+            arr = arr[:n_channels]
+            if which == "6" and not self._warned_w6_shape:
+                logger.warning(
+                    "weights_6hz_by_channel longer than channels=%d; truncated",
+                    n_channels,
+                )
+                self._warned_w6_shape = True
+            if which == "15" and not self._warned_w15_shape:
+                logger.warning(
+                    "weights_15hz_by_channel longer than channels=%d; truncated",
+                    n_channels,
+                )
+                self._warned_w15_shape = True
+
+        arr = np.maximum(arr, 1e-6)
+        # Normalize to mean=1 so scaling does not explode/vanish scores.
+        return arr / float(np.mean(arr))
+
+    def _predict_with_optional_6_15_weighting(
+        self,
+        epoch: np.ndarray,
+        prediction: ClassifierResult,
+    ) -> ClassifierResult:
+        if not self._cfg.enable_6_15_weighting:
+            return prediction
+
+        i6 = self._find_freq_index(6.0)
+        i15 = self._find_freq_index(15.0)
+        if i6 is None or i15 is None:
+            return prediction
+
+        n_channels = int(epoch.shape[0])
+        w6 = self._fit_channel_weights(
+            self._cfg.weights_6hz_by_channel,
+            n_channels,
+            which="6",
+        )
+        w15 = self._fit_channel_weights(
+            self._cfg.weights_15hz_by_channel,
+            n_channels,
+            which="15",
+        )
+
+        s6 = np.zeros(n_channels, dtype=np.float64)
+        s15 = np.zeros(n_channels, dtype=np.float64)
+        for ch in range(n_channels):
+            s6[ch] = compute_ssvep_snr_db(
+                epoch,
+                target_freq_hz=6.0,
+                fs=self._cfg.sample_rate_hz,
+                channel_idx=ch,
+                n_harmonics=self._cfg.n_harmonics,
+                noise_band_hz=self._cfg.snr_noise_band_hz,
+            )
+            s15[ch] = compute_ssvep_snr_db(
+                epoch,
+                target_freq_hz=15.0,
+                fs=self._cfg.sample_rate_hz,
+                channel_idx=ch,
+                n_harmonics=self._cfg.n_harmonics,
+                noise_band_hz=self._cfg.snr_noise_band_hz,
+            )
+
+        s6 = np.nan_to_num(s6, nan=0.0, posinf=50.0, neginf=-50.0)
+        s15 = np.nan_to_num(s15, nan=0.0, posinf=50.0, neginf=-50.0)
+
+        score6 = float(np.dot(w6, s6))
+        score15 = float(np.dot(w15, s15))
+
+        raw = np.asarray(prediction.raw_scores, dtype=np.float64).copy()
+        if raw.size != len(self._freqs):
+            return prediction
+        raw[i6] = score6
+        raw[i15] = score15
+
+        # Binary confidence between 6 and 15 Hz only.
+        pair = np.array([score6, score15], dtype=np.float64)
+        pair = pair - float(np.max(pair))
+        probs = np.exp(pair)
+        probs = probs / float(np.sum(probs))
+        winner = i6 if score6 >= score15 else i15
+        conf = float(np.max(probs))
+
+        return ClassifierResult(
+            frequency_hz=float(self._freqs[winner]),
+            confidence=conf,
+            raw_scores=raw.astype(np.float32),
+        )
+
+    def _decision_from_log_scores(self, log_scores: np.ndarray) -> tuple[float, float]:
+        if log_scores.size != len(self._freqs):
+            return float(self._freqs[0]), 0.0
+        shifted = log_scores - float(np.max(log_scores))
+        probs = np.exp(shifted)
+        total = float(np.sum(probs))
+        if total <= 0.0:
+            return float(self._freqs[0]), 0.0
+        probs /= total
+        idx = int(np.argmax(probs))
+        return float(self._freqs[idx]), float(probs[idx])
+
+    def _decision_gate(
+        self,
+        raw_scores: np.ndarray,
+        fallback_freq: float,
+        fallback_conf: float,
+    ) -> tuple[bool, bool, float, float]:
+        # No adaptive gate: always emit current epoch decision immediately.
+        if (
+            self._cfg.decision_confidence_min <= 0.0
+            and self._cfg.decision_max_extra_epochs <= 0
+            and not self._cfg.decision_emit_no_decision
+        ):
+            return True, False, fallback_freq, fallback_conf
+
+        scores = np.asarray(raw_scores, dtype=np.float64)
+        if scores.size != len(self._freqs):
+            return True, False, fallback_freq, fallback_conf
+
+        # Keep native score ratios when already positive; only offset when the
+        # vector contains non-positive values.
+        min_score = float(np.min(scores))
+        if min_score <= 0.0:
+            scores = scores - min_score + 1e-6
+
+        if self._decision_log_scores is None:
+            self._decision_log_scores = np.zeros_like(scores, dtype=np.float64)
+            self._decision_epochs = 0
+
+        self._decision_log_scores += np.log(np.clip(scores, 1e-12, None))
+        self._decision_epochs += 1
+
+        freq, conf = self._decision_from_log_scores(self._decision_log_scores)
+        if conf >= float(self._cfg.decision_confidence_min):
+            self._decision_log_scores = None
+            self._decision_epochs = 0
+            return True, False, freq, conf
+
+        allowed = 1 + int(self._cfg.decision_max_extra_epochs)
+        if self._decision_epochs < allowed:
+            return False, False, fallback_freq, fallback_conf
+
+        # Out of extra epochs and still low confidence.
+        self._decision_log_scores = None
+        self._decision_epochs = 0
+        if self._cfg.decision_emit_no_decision:
+            return True, True, fallback_freq, conf
+        return False, False, fallback_freq, conf
 
     def _effective_snr_min_db(self) -> float:
         base = float(self._cfg.snr_min_db)

@@ -1,0 +1,10 @@
+# Copy to your session folder as session_meta.yaml before recording.
+
+participant_id: team_member_01
+session_id: 2026-04-25_s01
+montage: cyton_default_8ch
+monitor_refresh_hz: 60
+viewing_distance_cm: 60
+notes: ""
+sleep_hours_last_night: null
+caffeine_hours_before: null

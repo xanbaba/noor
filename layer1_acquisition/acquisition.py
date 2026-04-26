@@ -50,6 +50,7 @@ class AcquisitionLoop:
         )
 
         self._total_samples = 0
+        self._sample_count_lock = threading.Lock()
         self._dropped_samples = 0
         self._last_log_time = 0.0
         self._loop_start_time = 0.0
@@ -95,7 +96,8 @@ class AcquisitionLoop:
                     self._outlet.push_chunk(chunk)
                     if self._raw_logger is not None:
                         self._raw_logger.append_chunk(chunk)
-                    self._total_samples += n_new
+                    with self._sample_count_lock:
+                        self._total_samples += n_new
                     self._detect_drops()
 
                 self._maybe_log_health()
@@ -114,6 +116,12 @@ class AcquisitionLoop:
     def stop(self) -> None:
         """Request a graceful shutdown from another thread."""
         self._running = False
+
+    @property
+    def total_samples(self) -> int:
+        """Samples pushed since loop start (thread-safe; for experiment sync)."""
+        with self._sample_count_lock:
+            return self._total_samples
 
     # ------------------------------------------------------------------
     # Internal helpers

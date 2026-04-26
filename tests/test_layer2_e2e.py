@@ -44,7 +44,7 @@ from layer2_processing.preprocessing import EpochBuffer, Preprocessor
 _STREAM_NAME = "BCI_RawEEG_E2E"
 _FS = 500
 _N_CHANNELS = 8
-_TARGET_FREQ = 12.0
+_TARGET_FREQ = 6.0
 _AMPLITUDE_UV = 30.0
 _NOISE_UV = 3.0       # low noise so FBCCA can detect it quickly
 _CHUNK_SIZE = 20      # 40 ms / push
@@ -58,7 +58,7 @@ _TIMEOUT_S = 20.0     # generous — CCA is slow on the first few epochs
 
 @pytest.fixture(scope="module")
 def ssvep_outlet():
-    """Open a BCI_RawEEG_E2E LSL outlet streaming 12 Hz SSVEP on Oz."""
+    """Open a BCI_RawEEG_E2E LSL outlet streaming 6 Hz SSVEP on Oz."""
     info = StreamInfo(
         name=_STREAM_NAME,
         type="EEG",
@@ -138,9 +138,9 @@ def e2e_cfg():
 def test_pipeline_emits_correct_frequency(ssvep_outlet, e2e_cfg):
     """
     Full stack:
-        synthetic 12 Hz outlet → RawEegInlet → EpochBuffer → Preprocessor
+        synthetic 6 Hz outlet → RawEegInlet → EpochBuffer → Preprocessor
         → FBCCAClassifier → SNR gate → on_emit callback
-    Assert that at least one SELECT at 12.0 Hz arrives within TIMEOUT_S seconds.
+    Assert that at least one SELECT at 6.0 Hz arrives within TIMEOUT_S seconds.
     """
     received: list[dict] = []
     done = threading.Event()
@@ -183,7 +183,7 @@ def test_pipeline_emits_correct_frequency(ssvep_outlet, e2e_cfg):
     )
 
     matching = [p for p in received if p.get("frequency") == _TARGET_FREQ]
-    assert matching, "No payload with the correct 12.0 Hz frequency"
+    assert matching, "No payload with the correct 6.0 Hz frequency"
     assert matching[0]["snr_db"] >= e2e_cfg.snr_min_db, (
         f"SNR {matching[0]['snr_db']:.2f} dB is below gate {e2e_cfg.snr_min_db} dB"
     )

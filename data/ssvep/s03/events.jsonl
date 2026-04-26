@@ -1,0 +1,40 @@
+{"event": "stim_on", "trial_id": 0, "label": "15hz", "frequency_hz": 15.0, "sample_index": 1925}
+{"event": "stim_off", "trial_id": 0, "sample_index": 3368}
+{"event": "stim_on", "trial_id": 1, "label": "12hz", "frequency_hz": 12.0, "sample_index": 4209}
+{"event": "stim_off", "trial_id": 1, "sample_index": 5772}
+{"event": "stim_on", "trial_id": 2, "label": "15hz", "frequency_hz": 15.0, "sample_index": 6614}
+{"event": "stim_off", "trial_id": 2, "sample_index": 8177}
+{"event": "stim_on", "trial_id": 3, "label": "12hz", "frequency_hz": 12.0, "sample_index": 9019}
+{"event": "stim_off", "trial_id": 3, "sample_index": 10462}
+{"event": "stim_on", "trial_id": 4, "label": "12hz", "frequency_hz": 12.0, "sample_index": 11424}
+{"event": "stim_off", "trial_id": 4, "sample_index": 12867}
+{"event": "stim_on", "trial_id": 5, "label": "15hz", "frequency_hz": 15.0, "sample_index": 13708}
+{"event": "stim_off", "trial_id": 5, "sample_index": 15272}
+{"event": "stim_on", "trial_id": 6, "label": "15hz", "frequency_hz": 15.0, "sample_index": 16113}
+{"event": "stim_off", "trial_id": 6, "sample_index": 17676}
+{"event": "stim_on", "trial_id": 7, "label": "15hz", "frequency_hz": 15.0, "sample_index": 18518}
+{"event": "stim_off", "trial_id": 7, "sample_index": 20081}
+{"event": "stim_on", "trial_id": 8, "label": "12hz", "frequency_hz": 12.0, "sample_index": 20923}
+{"event": "stim_off", "trial_id": 8, "sample_index": 22366}
+{"event": "stim_on", "trial_id": 9, "label": "15hz", "frequency_hz": 15.0, "sample_index": 23328}
+{"event": "stim_off", "trial_id": 9, "sample_index": 24771}
+{"event": "stim_on", "trial_id": 10, "label": "15hz", "frequency_hz": 15.0, "sample_index": 25612}
+{"event": "stim_off", "trial_id": 10, "sample_index": 27176}
+{"event": "stim_on", "trial_id": 11, "label": "15hz", "frequency_hz": 15.0, "sample_index": 28017}
+{"event": "stim_off", "trial_id": 11, "sample_index": 29580}
+{"event": "stim_on", "trial_id": 12, "label": "12hz", "frequency_hz": 12.0, "sample_index": 30422}
+{"event": "stim_off", "trial_id": 12, "sample_index": 31865}
+{"event": "stim_on", "trial_id": 13, "label": "15hz", "frequency_hz": 15.0, "sample_index": 32827}
+{"event": "stim_off", "trial_id": 13, "sample_index": 34270}
+{"event": "stim_on", "trial_id": 14, "label": "12hz", "frequency_hz": 12.0, "sample_index": 35232}
+{"event": "stim_off", "trial_id": 14, "sample_index": 36675}
+{"event": "stim_on", "trial_id": 15, "label": "15hz", "frequency_hz": 15.0, "sample_index": 37516}
+{"event": "stim_off", "trial_id": 15, "sample_index": 39080}
+{"event": "stim_on", "trial_id": 16, "label": "12hz", "frequency_hz": 12.0, "sample_index": 39921}
+{"event": "stim_off", "trial_id": 16, "sample_index": 41484}
+{"event": "stim_on", "trial_id": 17, "label": "12hz", "frequency_hz": 12.0, "sample_index": 42326}
+{"event": "stim_off", "trial_id": 17, "sample_index": 43769}
+{"event": "stim_on", "trial_id": 18, "label": "12hz", "frequency_hz": 12.0, "sample_index": 44731}
+{"event": "stim_off", "trial_id": 18, "sample_index": 46174}
+{"event": "stim_on", "trial_id": 19, "label": "12hz", "frequency_hz": 12.0, "sample_index": 47016}
+{"event": "stim_off", "trial_id": 19, "sample_index": 48579}

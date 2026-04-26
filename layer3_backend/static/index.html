@@ -3,43 +3,120 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SSVEP-BCI &mdash; Layer 4 MVP</title>
+  <title>SSVEP-BCI — Communicator</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div class="container">
+  <div class="app">
 
-    <div class="header">
-      <h1>SSVEP&thinsp;&middot;&thinsp;BCI</h1>
+    <!-- ══════════════════════════════════════════════
+         Page: Home — 5-option selector wheel
+    ══════════════════════════════════════════════ -->
+    <div class="page active" id="page-home">
+      <div class="page-title">What do you need?</div>
+      <div class="option-list" id="option-list">
+        <div class="option" data-idx="0">
+          <span class="opt-icon">🦽</span>
+          <span class="opt-label">Wheelchair</span>
+        </div>
+        <div class="option" data-idx="1">
+          <span class="opt-icon">🍽️</span>
+          <span class="opt-label">Food</span>
+        </div>
+        <div class="option" data-idx="2">
+          <span class="opt-icon">💧</span>
+          <span class="opt-label">Water</span>
+        </div>
+        <div class="option" data-idx="3">
+          <span class="opt-icon">🏥</span>
+          <span class="opt-label">Caregiver</span>
+        </div>
+        <div class="option" data-idx="4">
+          <span class="opt-icon">🔤</span>
+          <span class="opt-label">Spell</span>
+        </div>
+      </div>
     </div>
 
-    <!-- Stimulus tiles -->
-    <div class="tiles">
-      <div class="tile" id="tile-12" data-freq="12">
-        <span class="freq-label">12</span>
-        <span class="freq-unit">Hz</span>
-      </div>
-      <div class="tile" id="tile-15" data-freq="15">
-        <span class="freq-label">15</span>
-        <span class="freq-unit">Hz</span>
-      </div>
+    <!-- ══════════════════════════════════════════════
+         Page: Wheelchair control
+    ══════════════════════════════════════════════ -->
+    <div class="page" id="page-wheelchair">
+      <div class="page-icon">🦽</div>
+      <div class="page-title">Wheelchair Control</div>
+      <div class="page-sub">Gaze left button to go backward · right to go forward</div>
     </div>
 
-    <!-- Status panel -->
-    <div class="status" id="status">
-      <span class="dot"></span>
-      <span class="detected-freq" id="detected-freq">&mdash;</span>
-      <div class="meta">
-        <span>SNR <span class="value" id="snr-value">&mdash;</span></span>
-        <span>Conf <span class="value" id="conf-value">&mdash;</span></span>
-        <span>Epoch <span class="value" id="epoch-value">&mdash;</span></span>
-      </div>
+    <!-- ══════════════════════════════════════════════
+         Page: Food request
+    ══════════════════════════════════════════════ -->
+    <div class="page" id="page-food">
+      <div class="page-icon">🍽️</div>
+      <div class="page-title">I need food</div>
+      <div class="page-sub">Gaze right button to request food · left to go back</div>
     </div>
 
-    <div class="footer">Layer 4 MVP &middot; 60 Hz laptop &middot; gaze at a tile</div>
+    <!-- ══════════════════════════════════════════════
+         Page: Water request
+    ══════════════════════════════════════════════ -->
+    <div class="page" id="page-water">
+      <div class="page-icon">💧</div>
+      <div class="page-title">I need water</div>
+      <div class="page-sub">Gaze right button to request water · left to go back</div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         Page: Caregiver request
+    ══════════════════════════════════════════════ -->
+    <div class="page" id="page-caregiver">
+      <div class="page-icon">🏥</div>
+      <div class="page-title">Call caregiver</div>
+      <div class="page-sub">Gaze right button to call caregiver · left to go back</div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         Page: Letter speller
+    ══════════════════════════════════════════════ -->
+    <div class="page" id="page-letters">
+      <div class="page-title">Spell a word</div>
+      <div class="letter-display" id="letter-display">A</div>
+      <div class="letter-buffer-wrap">
+        <div class="letter-buffer" id="letter-buffer">&nbsp;</div>
+      </div>
+      <div class="page-sub">NEXT cycles A → Z → ⌫ → ✓ Done · SELECT picks</div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         Always-visible: two flickering action buttons
+    ══════════════════════════════════════════════ -->
+    <div class="buttons-row">
+
+      <div class="btn-tile green" id="btn-6" data-freq="6.0">
+        <div class="streak-badge" id="streak-6">0 / 5</div>
+        <div class="btn-action" id="label-6">SELECT ✓</div>
+        <div class="freq-tag">6 Hz</div>
+      </div>
+
+      <div class="btn-tile blue" id="btn-15" data-freq="15.0">
+        <div class="streak-badge" id="streak-15">0 / 5</div>
+        <div class="btn-action" id="label-15">NEXT →</div>
+        <div class="freq-tag">15 Hz</div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         Status bar
+    ══════════════════════════════════════════════ -->
+    <div class="status-bar" id="status-bar">
+      <span class="dot" id="dot"></span>
+      <span class="status-text" id="status-text">Connecting…</span>
+      <span class="confirm-line" id="confirm-line"></span>
+    </div>
+
+    <div class="footer">SSVEP–BCI · gaze at a button until it confirms (5×)</div>
 
   </div>
-
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -7,8 +7,28 @@ layer2_ws_url: ws://localhost:9001
 host: localhost
 port: 8000
 
-# Stimulus frequencies displayed on the frontend (must match Layer 2 config)
-stimulus_frequencies_hz: [12.0, 15.0]
+# Only two stimulus frequencies drive the UI:
+#   6 Hz → SELECT the current highlighted option
+#   15 Hz → NEXT (advance to next option / letter)
+stimulus_frequencies_hz: [6.0, 15.0]
+
+# Two action phrases — the frontend maps these to page-specific behaviour.
+# Utterances are handled dynamically by /api/speak-text; these are kept
+# non-empty so the bridge can emit "confirmed" events for each frequency.
+phrases:
+  - id: action_select
+    label: "SELECT"
+    frequency_hz: 6.0
+    color: "#00e676"
+    utterance: "select"
+  - id: action_next
+    label: "NEXT"
+    frequency_hz: 15.0
+    color: "#2979ff"
+    utterance: "next"
+
+# Optional default ElevenLabs voice (override with ELEVENLABS_VOICE_ID env)
+elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM"
 
 # Static file directory (relative to layer3_backend package root)
 static_dir: static

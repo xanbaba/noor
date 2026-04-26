@@ -8,8 +8,8 @@ Spawns:
 Every received SELECT payload is printed with a transport tag so you can
 confirm both emitters fire identical content::
 
-    [OSC] {"command":"SELECT","frequency":12.0,"snr_db":4.1,...}
-    [WS ] {"command":"SELECT","frequency":12.0,"snr_db":4.1,...}
+    [OSC] {"command":"SELECT","frequency":6.0,"snr_db":4.1,...}
+    [WS ] {"command":"SELECT","frequency":6.0,"snr_db":4.1,...}
 
 Usage::
 

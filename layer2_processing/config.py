@@ -74,6 +74,20 @@ class ProcessingConfig:
     additional_notch_freqs_hz: list[float] = field(default_factory=list)
     # Common average reference after bandpass (optional; off by default).
     use_car: bool = False
+    # Optional class-specific weighting for the 6 Hz vs 15 Hz binary case.
+    # Weights are per-channel row in epoch order.
+    enable_6_15_weighting: bool = False
+    weights_6hz_by_channel: Optional[list[float]] = None
+    weights_15hz_by_channel: Optional[list[float]] = None
+    # Confidence-gated adaptive decision extension.
+    # If confidence is below this threshold, the pipeline can defer decision
+    # up to ``decision_max_extra_epochs`` additional epochs.
+    decision_confidence_min: float = 0.0
+    decision_max_extra_epochs: int = 0
+    # If True and confidence is still below threshold after max extra epochs,
+    # emit ``decision_no_decision_command`` instead of dropping silently.
+    decision_emit_no_decision: bool = False
+    decision_no_decision_command: str = "NO_DECISION"
 
     @property
     def epoch_length_samples(self) -> int:
@@ -171,6 +185,37 @@ class ProcessingConfig:
         if self.prediction_smoothing_window < 0:
             raise ValueError("prediction_smoothing_window must be >= 0")
 
+        if not (0.0 <= self.decision_confidence_min <= 1.0):
+            raise ValueError("decision_confidence_min must be in [0, 1]")
+        if self.decision_max_extra_epochs < 0:
+            raise ValueError("decision_max_extra_epochs must be >= 0")
+        if not self.decision_no_decision_command.strip():
+            raise ValueError("decision_no_decision_command must be non-empty")
+
+        if self.enable_6_15_weighting:
+            has_6 = any(abs(f - 6.0) < 1e-6 for f in self.stimulus_frequencies_hz)
+            has_15 = any(abs(f - 15.0) < 1e-6 for f in self.stimulus_frequencies_hz)
+            if not (has_6 and has_15):
+                raise ValueError(
+                    "enable_6_15_weighting requires both 6.0 and 15.0 in stimulus_frequencies_hz"
+                )
+            if self.weights_6hz_by_channel is None or self.weights_15hz_by_channel is None:
+                raise ValueError(
+                    "enable_6_15_weighting requires weights_6hz_by_channel and weights_15hz_by_channel"
+                )
+            if not self.weights_6hz_by_channel or not self.weights_15hz_by_channel:
+                raise ValueError(
+                    "weights_6hz_by_channel and weights_15hz_by_channel must be non-empty"
+                )
+            if len(self.weights_6hz_by_channel) != len(self.weights_15hz_by_channel):
+                raise ValueError(
+                    "weights_6hz_by_channel and weights_15hz_by_channel must have equal length"
+                )
+            if any(w <= 0 for w in self.weights_6hz_by_channel):
+                raise ValueError("weights_6hz_by_channel values must be > 0")
+            if any(w <= 0 for w in self.weights_15hz_by_channel):
+                raise ValueError("weights_15hz_by_channel values must be > 0")
+
 
 def load_config(
     path: str | os.PathLike,
@@ -197,6 +242,18 @@ def load_config(
         snr_channel_indices = None
     else:
         snr_channel_indices = [int(i) for i in sci_raw]
+
+    w6_raw = raw.get("weights_6hz_by_channel", None)
+    if w6_raw is None:
+        weights_6hz_by_channel = None
+    else:
+        weights_6hz_by_channel = [float(x) for x in w6_raw]
+
+    w15_raw = raw.get("weights_15hz_by_channel", None)
+    if w15_raw is None:
+        weights_15hz_by_channel = None
+    else:
+        weights_15hz_by_channel = [float(x) for x in w15_raw]
 
     cfg = ProcessingConfig(
         lsl_stream_name=str(raw["lsl_stream_name"]),
@@ -238,6 +295,13 @@ def load_config(
         prediction_smoothing_window=int(raw.get("prediction_smoothing_window", 4)),
         additional_notch_freqs_hz=additional_notch_freqs_hz,
         use_car=bool(raw.get("use_car", False)),
+        enable_6_15_weighting=bool(raw.get("enable_6_15_weighting", False)),
+        weights_6hz_by_channel=weights_6hz_by_channel,
+        weights_15hz_by_channel=weights_15hz_by_channel,
+        decision_confidence_min=float(raw.get("decision_confidence_min", 0.0)),
+        decision_max_extra_epochs=int(raw.get("decision_max_extra_epochs", 0)),
+        decision_emit_no_decision=bool(raw.get("decision_emit_no_decision", False)),
+        decision_no_decision_command=str(raw.get("decision_no_decision_command", "NO_DECISION")),
     )
     cfg.validate()
     return cfg

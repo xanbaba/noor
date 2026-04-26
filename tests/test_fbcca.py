@@ -18,7 +18,7 @@ def _cfg(**overrides):
     defaults = dict(
         sample_rate_hz=FS,
         classifier="fbcca",
-        stimulus_frequencies_hz=[9.0, 12.0, 15.0],
+        stimulus_frequencies_hz=[6.0, 9.0, 20.0],
         sub_bands_hz=[[6, 90], [14, 90], [22, 90], [30, 90]],
         sub_band_filter_order=5,
         weight_a=1.25,
@@ -71,7 +71,7 @@ def test_factory_unknown_raises():
 # Correct frequency detection
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("target_hz", [9.0, 12.0, 15.0])
+@pytest.mark.parametrize("target_hz", [6.0, 9.0, 20.0])
 def test_detects_correct_frequency(target_hz):
     clf = FBCCAClassifier(_cfg())
     epoch = _ssvep_epoch(target_hz)
@@ -82,7 +82,7 @@ def test_detects_correct_frequency(target_hz):
     )
 
 
-@pytest.mark.parametrize("target_hz", [9.0, 12.0, 15.0])
+@pytest.mark.parametrize("target_hz", [6.0, 9.0, 20.0])
 def test_confidence_above_threshold_for_ssvep(target_hz):
     clf = FBCCAClassifier(_cfg())
     epoch = _ssvep_epoch(target_hz)
@@ -124,10 +124,10 @@ def test_predict_wrong_ndim_raises():
 
 def test_result_raw_scores_shape():
     clf = FBCCAClassifier(_cfg())
-    epoch = _ssvep_epoch(12.0)
+    epoch = _ssvep_epoch(6.0)
     result = clf.predict(epoch)
     assert result.raw_scores.shape == (3,)  # 3 stimulus frequencies
-    assert result.frequency_hz in [9.0, 12.0, 15.0]
+    assert result.frequency_hz in [6.0, 9.0, 20.0]
     assert 0.0 <= result.confidence <= 1.0 + 1e-6
 
 
