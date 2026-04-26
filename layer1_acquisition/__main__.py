@@ -38,6 +38,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override the serial port (e.g. COM3 on Windows, /dev/ttyUSB0 on Linux).",
     )
     p.add_argument(
+        "--raw-eeg-log",
+        default=None,
+        metavar="PATH",
+        help="Append raw µV samples (all channels, CSV) to this file. Overrides config.",
+    )
+    p.add_argument(
         "--skip-impedance",
         action="store_true",
         default=False,
@@ -65,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     overrides = {
         "board": args.board,
         "serial_port": args.serial_port,
+        "raw_eeg_log_path": args.raw_eeg_log,
     }
 
     try:

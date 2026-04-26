@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from layer2_processing.snr import compute_ssvep_snr_db
+from layer2_processing.snr import compute_ssvep_snr_db, compute_ssvep_snr_db_aggregate
 
 FS = 500.0
 N = 1000   # 2 s
@@ -105,3 +105,50 @@ def test_channel_idx_out_of_range_raises():
     epoch = _pure_sine(12.0)
     with pytest.raises(ValueError, match="channel_idx"):
         compute_ssvep_snr_db(epoch, target_freq_hz=12.0, fs=FS, channel_idx=5)
+
+
+def test_aggregate_max_matches_best_channel():
+    rng = np.random.default_rng(42)
+    epoch = (rng.standard_normal((4, N)) * 3.0).astype(np.float32)
+    t = np.arange(N) / FS
+    epoch[2] += (80.0 * np.sin(2 * np.pi * 12.0 * t)).astype(np.float32)
+    agg = compute_ssvep_snr_db_aggregate(
+        epoch,
+        target_freq_hz=12.0,
+        fs=FS,
+        channel_indices=[0, 1, 2, 3],
+        mode="max",
+    )
+    ch2 = compute_ssvep_snr_db(epoch, target_freq_hz=12.0, fs=FS, channel_idx=2)
+    assert abs(agg - ch2) < 1e-6
+
+
+def test_aggregate_median_between_noise_and_signal():
+    rng = np.random.default_rng(7)
+    epoch = (rng.standard_normal((4, N)) * 5.0).astype(np.float32)
+    t = np.arange(N) / FS
+    epoch[0] += (60.0 * np.sin(2 * np.pi * 15.0 * t)).astype(np.float32)
+    snrs = [
+        compute_ssvep_snr_db(epoch, target_freq_hz=15.0, fs=FS, channel_idx=i)
+        for i in range(4)
+    ]
+    med = compute_ssvep_snr_db_aggregate(
+        epoch,
+        target_freq_hz=15.0,
+        fs=FS,
+        channel_indices=[0, 1, 2, 3],
+        mode="median",
+    )
+    assert abs(med - float(np.median(snrs))) < 1e-6
+
+
+def test_aggregate_empty_indices_raises():
+    epoch = _pure_sine(12.0)
+    with pytest.raises(ValueError, match="non-empty"):
+        compute_ssvep_snr_db_aggregate(
+            epoch,
+            target_freq_hz=12.0,
+            fs=FS,
+            channel_indices=[],
+            mode="mean",
+        )

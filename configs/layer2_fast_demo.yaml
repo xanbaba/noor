@@ -1,0 +1,52 @@
+# Layer 2 — lower-latency preset (~1.5 s window, ~2.5 Hz cadence).
+# Trades stability vs ``layer2_default.yaml``; tune snr_min_db if accuracy drops.
+
+lsl_stream_name: BCI_RawEEG
+sample_rate_hz: 500
+
+notch_freq_hz: 60
+additional_notch_freqs_hz: [50]
+notch_q: 35
+bandpass_low_hz: 5
+bandpass_high_hz: 45
+bandpass_order: 4
+use_car: false
+artefact_threshold_uv: 1600.0
+artefact_policy: penalize
+artefact_penalty: 0.65
+artefact_channel_indices: [0, 1, 2, 3, 4, 5]
+
+epoch_length_s: 1.5
+epoch_step_s: 0.4
+
+classifier: fbcca
+sub_bands_hz:
+  - [6, 90]
+  - [14, 90]
+  - [22, 90]
+  - [30, 90]
+sub_band_filter_order: 5
+weight_a: 1.25
+weight_b: 0.25
+n_harmonics: 3
+stimulus_frequencies_hz: [12.0, 15.0]
+
+snr_min_db: 3.5
+snr_noise_band_hz: 1.0
+snr_aggregate: max
+snr_channel_indices: [0, 1, 2, 3, 4, 5]
+snr_channel_index: 0
+snr_adaptive_relax: false
+snr_adaptive_floor_db: 2.5
+
+prediction_smoothing_window: 4
+
+websocket_host: localhost
+websocket_port: 9001
+osc_host: 127.0.0.1
+osc_port: 9000
+osc_address: /bci/command
+
+inlet_resolve_timeout_s: 5.0
+inlet_pull_timeout_s: 0.05
+log_interval_s: 5

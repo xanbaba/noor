@@ -53,6 +53,35 @@ Quest 3 frontend, game engine, etc.).
 Edit `channel_labels` if your cap wiring order differs. Layer 2’s SNR gate uses
 `snr_channel_index` (default `0` = first row, expected Oz).
 
+### 19-site cap — which eight sites on Cyton N1P–N8P?
+
+Cyton has **eight EEG inputs** (N1P…N8P) plus separate **GND** and **reference/bias**
+pins. Your silkscreen lists many sites (e.g. O1, O2, P3, Pz, P4, …, FP1, FP2,
+**GND**, **REF**) but there is **no Oz** — for SSVEP you still want a **posterior-heavy**
+set on the eight signal pins.
+
+**Recommended eight (signal → N1P…N8P in order):** **O1, O2, Pz, P3, P4, C3, C4,
+T5** (or swap **T5** for **T6** if routing is easier). Put **GND** and **REF** on the
+Cyton **ground / bias** inputs per the OpenBCI Cyton + cap guide (they are **not**
+wired into N1P–N8P).
+
+**Why:** O1/O2 carry most steady-state visual response when Oz is absent; Pz/P3/P4
+give midline and lateral parietal context; C3/C4 add spatial spread for CAR/FBCCA;
+T5 (or T6) keeps one more **posterior** row than frontal sites (F7–Fp2), which are
+usually worse for flicker SNR.
+
+**Paired configs in this repo** (labels + Layer 2 SNR/artefact rows already aligned):
+
+```powershell
+python -m layer1_acquisition --config configs/cyton_headset_19el_8ch_ssvep.yaml --serial-port COMx
+python -m layer2_processing --config configs/layer2_headset_19el_8ch_ssvep.yaml
+```
+
+If you change the **physical** order on the Cyton header, edit **`channel_labels`**
+in the Layer 1 YAML to match **CH1 = row 0**, then set **`snr_channel_index`** in
+Layer 2 to the **0-based row** of your preferred SSVEP channel, and
+**`artefact_channel_indices`** to the subset used for the peak-to-peak gate.
+
 ---
 
 ## Electrode preparation procedure
@@ -112,6 +141,14 @@ Use the built-in BrainFlow synthetic board to run without hardware:
 python -m layer1_acquisition --config configs/cyton_default.yaml --board synthetic --skip-impedance
 ```
 
+To **record raw µV** for all channels to a CSV (same samples as LSL), either set
+`raw_eeg_log_path` in YAML or use `--raw-eeg-log` (500 Hz × 8 ch grows quickly on
+disk):
+
+```bash
+python -m layer1_acquisition --config configs/cyton_default.yaml --board synthetic --skip-impedance --raw-eeg-log recordings/run.csv
+```
+
 ### CLI options
 
 | Flag | Default | Description |
@@ -119,6 +156,7 @@ python -m layer1_acquisition --config configs/cyton_default.yaml --board synthet
 | `--config PATH` | `configs/cyton_default.yaml` | YAML configuration file |
 | `--board` | _(from config)_ | Override board: `cyton` or `synthetic` |
 | `--serial-port PORT` | _(from config)_ | Override serial port (e.g. `COM3`) |
+| `--raw-eeg-log PATH` | off | Append raw multi-channel µV CSV (overrides YAML) |
 | `--skip-impedance` | off | Bypass impedance gate (bench/dev only) |
 | `--log-level` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
@@ -159,6 +197,8 @@ Edit `configs/cyton_default.yaml` to adjust:
 | `lsl_stream_name` | `BCI_RawEEG` | **Do not change** — downstream contract |
 | `pull_interval_ms` | `10` | BrainFlow ring-buffer poll interval |
 | `log_interval_s` | `5` | Health log cadence |
+| `raw_eeg_log_path` | _(unset)_ | If set, append CSV: `sample_index`, `monotonic_s`, then one column per `channel_labels` row (float32 µV, same as LSL) |
+| `raw_eeg_log_format` | `csv` | Only `csv` supported today |
 
 ---
 
@@ -265,7 +305,9 @@ neuron/
 Layer 2 is a standalone Python process that connects to the `BCI_RawEEG` LSL
 stream produced by Layer 1, processes each sliding 2-second epoch through:
 
-1. **Notch filter** (60 Hz mains removal, Q = 35)
+1. **Notch filter(s)** — primary ``notch_freq_hz`` (default 60 Hz) plus optional
+   ``additional_notch_freqs_hz`` (default includes 50 Hz so EU mains is not left
+   inside the 5–45 Hz bandpass), Q = 35
 2. **Bandpass filter** (5–45 Hz, 4th-order Butterworth)
 3. **Common Average Reference (CAR)** — reduces common-mode noise
 4. **Artefact gate** — drops epochs when peak-to-peak (after filters) on the
@@ -374,12 +416,12 @@ without touching any Python source.
 
 **Artefact gate:** if every epoch is rejected (`artefactual` equals `epochs` in
 health logs), peak-to-peak on at least one **evaluated** channel is above
-``artefact_threshold_uv``. With eight active EEG rows, Pz/Cz often breach a
-100 µV gate; default ``configs/layer2_default.yaml`` evaluates indices
-``[0, 1, 2, 3, 4, 5]`` (Oz through PO4) only. Set ``artefact_channel_indices:
-null`` to gate on all channels, or raise ``artefact_threshold_uv``. Health
-lines include ``last_max_ptp`` (max over all rows) and ``eval_max`` (max over
-evaluated rows only).
+``artefact_threshold_uv``. Default YAML uses **1600 µV** (not clinical 100 µV)
+because real Cyton streams can show **~1–3 mV** peak-to-peak on Oz after
+filters when contacts or reference are noisy. Indices ``[0, 1, 2, 3, 4, 5]``
+(Oz through PO4) exclude Pz/Cz from
+the veto. Tighten ``artefact_threshold_uv`` once traces are calmer. Health lines
+include ``last_max_ptp`` and ``eval_max``.
 
 ### Running the tests
 

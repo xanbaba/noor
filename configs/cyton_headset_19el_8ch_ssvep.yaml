@@ -1,0 +1,27 @@
+# Cyton + 19-site cap: pick 8 EEG inputs for SSVEP (no Oz on silkscreen — use O1/O2 + Pz ring).
+# Use with ``configs/layer2_headset_19el_8ch_ssvep.yaml`` for matching SNR + artefact rows.
+board: cyton
+serial_port: auto
+sample_rate_hz: 500
+channel_count: 8
+
+# Plug N1P…N8P (CH1…CH8) in this order. GND / REF go to the Cyton bias pins per OpenBCI docs
+# (not counted in these eight signal rows).
+channel_labels:
+  - O1   # CH1 — primary SSVEP / SNR row (see layer2 snr_channel_index)
+  - O2   # CH2
+  - Pz   # CH3 — midline parietal (cap label PZ)
+  - P3   # CH4
+  - P4   # CH5
+  - C3   # CH6
+  - C4   # CH7
+  - T5   # CH8 — posterior temporal (swap T5↔T6 if your cap routing prefers T6)
+
+impedance_max_kohm: 10.0
+lsl_stream_name: BCI_RawEEG
+lsl_stream_type: EEG
+pull_interval_ms: 10
+log_interval_s: 5
+
+raw_eeg_log_path: recordings/session.csv
+raw_eeg_log_format: csv

@@ -37,6 +37,8 @@ def test_load_valid_config(tmp_path):
     assert cfg.sample_rate_hz == 500
     assert cfg.channel_count == 8
     assert cfg.lsl_stream_name == "BCI_RawEEG"
+    assert cfg.raw_eeg_log_path is None
+    assert cfg.raw_eeg_log_format == "csv"
 
 
 def test_active_channel_indices(tmp_path):

@@ -36,3 +36,7 @@ pull_interval_ms: 10
 
 # How often the acquisition loop logs a health summary (seconds).
 log_interval_s: 5
+
+# Optional: append raw EEG (same float32 µV chunks as LSL) to a CSV file.
+# raw_eeg_log_path: recordings/session.csv
+# raw_eeg_log_format: csv

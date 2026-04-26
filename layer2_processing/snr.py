@@ -12,7 +12,11 @@ Returned in decibels:
 
 from __future__ import annotations
 
+from typing import Literal
+
 import numpy as np
+
+SnrAggregateMode = Literal["max", "mean", "median"]
 
 
 def compute_ssvep_snr_db(
@@ -77,3 +81,47 @@ def compute_ssvep_snr_db(
     if noise_per_bin <= 0:
         return float("inf")
     return float(10.0 * np.log10(p_sig / noise_per_bin))
+
+
+def compute_ssvep_snr_db_aggregate(
+    epoch: np.ndarray,
+    target_freq_hz: float,
+    fs: float,
+    channel_indices: list[int],
+    mode: SnrAggregateMode,
+    n_harmonics: int = 3,
+    noise_band_hz: float = 1.0,
+) -> float:
+    """Per-channel sum-of-harmonics SNR, then aggregate across rows.
+
+    Args:
+        epoch: ``(channels, n_samples)``.
+        target_freq_hz: Stimulus frequency to test.
+        fs: Sampling rate in Hz.
+        channel_indices: Row indices (each passed to :func:`compute_ssvep_snr_db`).
+        mode: ``max``, ``mean``, or ``median`` across channel SNRs.
+
+    Returns:
+        Aggregated SNR in dB.
+    """
+    if not channel_indices:
+        raise ValueError("channel_indices must be non-empty")
+    values = [
+        compute_ssvep_snr_db(
+            epoch,
+            target_freq_hz=target_freq_hz,
+            fs=fs,
+            channel_idx=idx,
+            n_harmonics=n_harmonics,
+            noise_band_hz=noise_band_hz,
+        )
+        for idx in channel_indices
+    ]
+    arr = np.asarray(values, dtype=np.float64)
+    if mode == "max":
+        return float(np.nanmax(arr))
+    if mode == "mean":
+        return float(np.nanmean(arr))
+    if mode == "median":
+        return float(np.median(arr))
+    raise ValueError(f"unknown aggregate mode: {mode!r}")

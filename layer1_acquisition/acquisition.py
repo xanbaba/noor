@@ -6,12 +6,14 @@ import logging
 import signal
 import threading
 import time
+from pathlib import Path
 
 import numpy as np
 
 from .boards.base import AbstractBoard
 from .config import AcquisitionConfig
 from .lsl_outlet import RawEegOutlet
+from .raw_eeg_file_logger import RawEegFileLogger
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,15 @@ class AcquisitionLoop:
         self._loop_start_time = 0.0
         self._first_chunk_time: float | None = None
 
+        self._raw_logger: RawEegFileLogger | None = None
+        if cfg.raw_eeg_log_path:
+            self._raw_logger = RawEegFileLogger(
+                Path(cfg.raw_eeg_log_path),
+                cfg.channel_labels,
+                cfg.sample_rate_hz,
+                cfg.raw_eeg_log_format,
+            )
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -82,6 +93,8 @@ class AcquisitionLoop:
                     if self._first_chunk_time is None:
                         self._first_chunk_time = time.monotonic()
                     self._outlet.push_chunk(chunk)
+                    if self._raw_logger is not None:
+                        self._raw_logger.append_chunk(chunk)
                     self._total_samples += n_new
                     self._detect_drops()
 
@@ -145,6 +158,11 @@ class AcquisitionLoop:
             self._last_log_time = now
 
     def _shutdown(self) -> None:
+        if self._raw_logger is not None:
+            try:
+                self._raw_logger.close()
+            finally:
+                self._raw_logger = None
         logger.info(
             "Acquisition loop stopping. Total samples pushed: %d, "
             "estimated drops: %d.",

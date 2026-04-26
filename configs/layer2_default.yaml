@@ -5,13 +5,23 @@ lsl_stream_name: BCI_RawEEG
 sample_rate_hz: 500
 
 # --- Preprocessing -----------------------------------------------------------
+# Primary line frequency (Americas: 60). EU/Middle East often need 50 Hz too —
+# see ``additional_notch_freqs_hz`` so 50 Hz is not left inside the 5–45 Hz bandpass.
 notch_freq_hz: 60
+additional_notch_freqs_hz: [50]
 notch_q: 35
 bandpass_low_hz: 5
 bandpass_high_hz: 45
 bandpass_order: 4
-artefact_threshold_uv: 100.0
-# Peak-to-peak gate after notch+bandpass+CAR. Rows match cyton_default channel order.
+# Common average reference (CAR) can reduce SSVEP contrast; default off — set true to A/B.
+use_car: false
+# Peak-to-peak on gated channels after filters. Real Cyton + dry cap can exceed
+# 1 mV PTP on Oz while still usable for SSVEP; 100 µV vetoed every epoch (debug).
+artefact_threshold_uv: 1600.0
+# ``drop`` skips the epoch; ``penalize`` runs FBCCA/SNR but scales confidence.
+artefact_policy: penalize
+artefact_penalty: 0.65
+# Peak-to-peak gate after notch+bandpass (+ optional CAR). Rows match cyton_default channel order.
 # Oz–PO4 (0–5) only: Pz/Cz often exceed 100 µV in real EEG and would reject every epoch.
 # Set to null to require all channels under the threshold.
 artefact_channel_indices: [0, 1, 2, 3, 4, 5]
@@ -21,6 +31,7 @@ epoch_length_s: 2.0
 epoch_step_s: 0.5
 
 # --- Classifier (FBCCA, calibration-free) ------------------------------------
+# Reference signals use sin/cos at f, 2f, … n_harmonics·f (see n_harmonics).
 classifier: fbcca
 sub_bands_hz:
   - [6, 90]
@@ -41,7 +52,18 @@ stimulus_frequencies_hz: [12.0, 15.0]
 # --- SNR gate ----------------------------------------------------------------
 snr_min_db: 3.5
 snr_noise_band_hz: 1.0
-snr_channel_index: 0          # 0 = Oz row in the cyton_default.yaml frame
+# ``single`` uses snr_channel_index only; ``max``/``mean``/``median`` aggregate
+# per-channel SNRs over snr_channel_indices (null = all rows).
+snr_aggregate: max
+snr_channel_indices: [0, 1, 2, 3, 4, 5]
+snr_channel_index: 0          # used when snr_aggregate: single (e.g. Oz row)
+# After consecutive SNR rejects, relax threshold toward snr_adaptive_floor_db.
+snr_adaptive_relax: false
+snr_adaptive_floor_db: 2.5
+
+# --- Temporal smoothing ------------------------------------------------------
+# Majority vote over the last N classifier frequencies that passed SNR (0 or 1 = off).
+prediction_smoothing_window: 4
 
 # --- Outputs -----------------------------------------------------------------
 websocket_host: localhost

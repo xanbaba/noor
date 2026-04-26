@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +22,9 @@ class AcquisitionConfig:
     lsl_stream_type: str
     pull_interval_ms: int
     log_interval_s: int
+    # Optional: append same float32 µV chunks as LSL to this file (CSV). None = off.
+    raw_eeg_log_path: Optional[str] = None
+    raw_eeg_log_format: str = "csv"
 
     @property
     def active_channel_indices(self) -> list[int]:
@@ -47,6 +50,13 @@ class AcquisitionConfig:
             )
         if self.pull_interval_ms < 1:
             raise ValueError("pull_interval_ms must be >= 1.")
+        fmt = (self.raw_eeg_log_format or "csv").lower()
+        if fmt not in {"csv"}:
+            raise ValueError(
+                f"raw_eeg_log_format must be 'csv' for now; got {self.raw_eeg_log_format!r}"
+            )
+        if self.raw_eeg_log_path is not None and not str(self.raw_eeg_log_path).strip():
+            raise ValueError("raw_eeg_log_path must be non-empty when set.")
 
 
 def load_config(
@@ -68,6 +78,12 @@ def load_config(
     if overrides:
         raw.update({k: v for k, v in overrides.items() if v is not None})
 
+    rlp = raw.get("raw_eeg_log_path")
+    if rlp is None or (isinstance(rlp, str) and not rlp.strip()):
+        raw_eeg_log_path: Optional[str] = None
+    else:
+        raw_eeg_log_path = str(rlp)
+
     cfg = AcquisitionConfig(
         board=str(raw["board"]),
         serial_port=str(raw["serial_port"]),
@@ -79,6 +95,8 @@ def load_config(
         lsl_stream_type=str(raw["lsl_stream_type"]),
         pull_interval_ms=int(raw["pull_interval_ms"]),
         log_interval_s=int(raw["log_interval_s"]),
+        raw_eeg_log_path=raw_eeg_log_path,
+        raw_eeg_log_format=str(raw.get("raw_eeg_log_format", "csv")),
     )
     cfg.validate()
     return cfg

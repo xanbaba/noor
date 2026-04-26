@@ -13,6 +13,7 @@ from __future__ import annotations
 import signal
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -23,9 +24,13 @@ from layer2_processing.logging_config import get_logger
 from layer2_processing.lsl_inlet import RawEegInlet
 from layer2_processing.outputs import OscEmitter, WebSocketEmitter
 from layer2_processing.preprocessing import EpochBuffer, Preprocessor
-from layer2_processing.snr import compute_ssvep_snr_db
+from layer2_processing.snr import compute_ssvep_snr_db, compute_ssvep_snr_db_aggregate
+from layer2_processing.smoothing import smoothed_frequency_hz
 
 logger = get_logger(__name__)
+
+_SNRELAX_STEP_DB = 0.25
+_SNRELAX_CAP = 8
 
 
 @dataclass
@@ -86,6 +91,10 @@ class Pipeline:
         self._stop = threading.Event()
         self._last_log = time.monotonic()
         self._last_ptp_eval_max: float = 0.0
+        self._consecutive_snr_rejects = 0
+        sw = int(cfg.prediction_smoothing_window)
+        self._smooth_maxlen = max(1, sw) if sw > 1 else 0
+        self._freq_window: deque[float] = deque(maxlen=self._smooth_maxlen or 1)
 
     def stop(self) -> None:
         self._stop.set()
@@ -107,12 +116,20 @@ class Pipeline:
     def run(self) -> None:
         """Block until :meth:`stop` is called or the inlet dies."""
         self._install_signal_handlers()
+        snr_line = (
+            f"SNR≥{self._cfg.snr_min_db:.1f} dB (adaptive to "
+            f"{self._cfg.snr_adaptive_floor_db:.1f} dB floor)"
+            if self._cfg.snr_adaptive_relax
+            else f"SNR≥{self._cfg.snr_min_db:.1f} dB"
+        )
         logger.info(
-            "Pipeline running | epoch=%.2fs/%.2fs | freqs=%s | SNR≥%.1f dB",
+            "Pipeline running | epoch=%.2fs/%.2fs | freqs=%s | %s | artefact=%s | CAR=%s",
             self._cfg.epoch_length_s,
             self._cfg.epoch_step_s,
             self._cfg.stimulus_frequencies_hz,
-            self._cfg.snr_min_db,
+            snr_line,
+            self._cfg.artefact_policy,
+            self._cfg.use_car,
         )
 
         try:
@@ -152,47 +169,104 @@ class Pipeline:
 
         if result.artefactual:
             self.stats.epochs_artefactual += 1
-            logger.debug(
-                "Epoch dropped (artefact) | max_ptp_eval=%.1f µV (threshold=%.1f on %s)",
-                self._last_ptp_eval_max,
-                self._cfg.artefact_threshold_uv,
-                "all ch" if idx is None else f"indices {list(idx)}",
-            )
-            return
+            if self._cfg.artefact_policy == "drop":
+                logger.debug(
+                    "Epoch dropped (artefact) | max_ptp_eval=%.1f µV (threshold=%.1f on %s)",
+                    self._last_ptp_eval_max,
+                    self._cfg.artefact_threshold_uv,
+                    "all ch" if idx is None else f"indices {list(idx)}",
+                )
+                return
+            if self._cfg.artefact_policy == "penalize":
+                logger.debug(
+                    "Epoch artefactual (penalize) | max_ptp_eval=%.1f µV (threshold=%.1f on %s)",
+                    self._last_ptp_eval_max,
+                    self._cfg.artefact_threshold_uv,
+                    "all ch" if idx is None else f"indices {list(idx)}",
+                )
 
         prediction = self._classifier.predict(result.data)
-        snr_db = compute_ssvep_snr_db(
-            result.data,
-            target_freq_hz=prediction.frequency_hz,
-            fs=self._cfg.sample_rate_hz,
-            channel_idx=self._cfg.snr_channel_index,
-            n_harmonics=self._cfg.n_harmonics,
-            noise_band_hz=self._cfg.snr_noise_band_hz,
-        )
+        snr_db = self._compute_snr_db(result.data, prediction.frequency_hz)
 
-        if snr_db < self._cfg.snr_min_db:
-            self.stats.epochs_below_snr += 1
-            logger.debug(
-                "Epoch dropped (SNR %.2f dB < %.2f dB) | freq=%.1f Hz",
-                snr_db,
-                self._cfg.snr_min_db,
-                prediction.frequency_hz,
-            )
-            return
+        if self._cfg.snr_gate_enabled:
+            effective_min = self._effective_snr_min_db()
+            if snr_db < effective_min:
+                self.stats.epochs_below_snr += 1
+                if self._cfg.snr_adaptive_relax:
+                    self._consecutive_snr_rejects += 1
+                logger.debug(
+                    "Epoch dropped (SNR %.2f dB < %.2f dB effective) | freq=%.1f Hz",
+                    snr_db,
+                    effective_min,
+                    prediction.frequency_hz,
+                )
+                return
 
+            if self._cfg.snr_adaptive_relax:
+                self._consecutive_snr_rejects = 0
+
+        confidence = float(prediction.confidence)
+        if result.artefactual and self._cfg.artefact_policy == "penalize":
+            confidence *= float(self._cfg.artefact_penalty)
+
+        raw_freq = float(prediction.frequency_hz)
+        if self._smooth_maxlen <= 1:
+            out_freq = raw_freq
+        else:
+            self._freq_window.append(raw_freq)
+            out_freq = smoothed_frequency_hz(self._freq_window)
+
+        # ``snr_db`` is for the classifier frequency this epoch; ``out_freq`` may differ
+        # briefly when temporal smoothing is enabled.
         payload = build_payload(
-            frequency_hz=prediction.frequency_hz,
+            frequency_hz=out_freq,
             snr_db=snr_db,
-            confidence=prediction.confidence,
+            confidence=confidence,
             epoch_ms=self._epoch_ms,
         )
         self._emit(payload)
         self.stats.commands_emitted += 1
         logger.info(
             "SELECT | freq=%.2f Hz | SNR=%.2f dB | conf=%.2f",
-            prediction.frequency_hz,
+            out_freq,
             snr_db,
-            prediction.confidence,
+            confidence,
+        )
+
+    def _effective_snr_min_db(self) -> float:
+        base = float(self._cfg.snr_min_db)
+        if not self._cfg.snr_adaptive_relax:
+            return base
+        relax = _SNRELAX_STEP_DB * min(self._consecutive_snr_rejects, _SNRELAX_CAP)
+        return max(float(self._cfg.snr_adaptive_floor_db), base - relax)
+
+    def _snr_indices_for_epoch(self, n_channels: int) -> list[int]:
+        raw = self._cfg.snr_channel_indices
+        if raw is None:
+            return list(range(n_channels))
+        out = [i for i in raw if 0 <= i < n_channels]
+        return out if out else list(range(n_channels))
+
+    def _compute_snr_db(self, data, target_freq_hz: float) -> float:
+        if self._cfg.snr_aggregate == "single":
+            return compute_ssvep_snr_db(
+                data,
+                target_freq_hz=target_freq_hz,
+                fs=self._cfg.sample_rate_hz,
+                channel_idx=self._cfg.snr_channel_index,
+                n_harmonics=self._cfg.n_harmonics,
+                noise_band_hz=self._cfg.snr_noise_band_hz,
+            )
+        ch_ix = self._snr_indices_for_epoch(int(data.shape[0]))
+        mode = self._cfg.snr_aggregate
+        return compute_ssvep_snr_db_aggregate(
+            data,
+            target_freq_hz=target_freq_hz,
+            fs=float(self._cfg.sample_rate_hz),
+            channel_indices=ch_ix,
+            mode=mode,  # type: ignore[arg-type]
+            n_harmonics=self._cfg.n_harmonics,
+            noise_band_hz=self._cfg.snr_noise_band_hz,
         )
 
     def _emit(self, payload: dict[str, Any]) -> None:

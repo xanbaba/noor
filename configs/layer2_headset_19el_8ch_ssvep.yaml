@@ -1,0 +1,44 @@
+# Layer 2 — matches ``cyton_headset_19el_8ch_ssvep.yaml`` row order (O1=0 … T5=7).
+# Copy of defaults except SNR + artefact rows aligned to that cap.
+
+lsl_stream_name: BCI_RawEEG
+sample_rate_hz: 500
+
+notch_freq_hz: 60
+additional_notch_freqs_hz: [50]
+notch_q: 35
+bandpass_low_hz: 5
+bandpass_high_hz: 45
+bandpass_order: 4
+artefact_threshold_uv: 1600.0
+# Gate on occipital–parietal cluster only; C3/C4/T5 often noisier for jaw/neck.
+artefact_channel_indices: [0, 1, 2, 3, 4]
+
+epoch_length_s: 2.0
+epoch_step_s: 0.5
+
+classifier: fbcca
+sub_bands_hz:
+  - [6, 90]
+  - [14, 90]
+  - [22, 90]
+  - [30, 90]
+sub_band_filter_order: 5
+weight_a: 1.25
+weight_b: 0.25
+n_harmonics: 3
+stimulus_frequencies_hz: [12.0, 15.0]
+
+snr_min_db: 3.5
+snr_noise_band_hz: 1.0
+snr_channel_index: 0   # O1 (Cyton CH1)
+
+websocket_host: localhost
+websocket_port: 9001
+osc_host: 127.0.0.1
+osc_port: 9000
+osc_address: /bci/command
+
+inlet_resolve_timeout_s: 5.0
+inlet_pull_timeout_s: 0.05
+log_interval_s: 5

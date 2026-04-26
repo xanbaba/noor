@@ -89,6 +89,12 @@ def test_artefact_channel_indices_negative_rejected(tmp_path):
         load_config(_write_yaml(tmp_path, y))
 
 
+def test_additional_notch_out_of_range_rejected(tmp_path):
+    y = _VALID_YAML + "\nadditional_notch_freqs_hz: [300]\n"
+    with pytest.raises(ValueError, match="additional_notch_freqs_hz"):
+        load_config(_write_yaml(tmp_path, y))
+
+
 def test_derived_epoch_samples(tmp_path):
     cfg = load_config(_write_yaml(tmp_path, _VALID_YAML))
     assert cfg.epoch_length_samples == 1000   # 2.0 s × 500 Hz
@@ -112,7 +118,56 @@ def test_default_config_file_loads():
     if not default.exists():
         pytest.skip("configs/layer2_default.yaml not found — run from project root.")
     cfg = load_config(default)
-    assert cfg.stimulus_frequencies_hz, "stimulus_frequencies_hz must not be empty"
+    assert cfg.stimulus_frequencies_hz, "stimulus_frequencies_hz must be non-empty"
+    assert cfg.snr_aggregate == "max"
+    assert cfg.use_car is False
+
+
+def test_fast_demo_config_loads():
+    p = Path("configs/layer2_fast_demo.yaml")
+    if not p.exists():
+        pytest.skip("configs/layer2_fast_demo.yaml not found — run from project root.")
+    cfg = load_config(p)
+    assert cfg.epoch_length_s == 1.5
+    assert cfg.epoch_step_s == 0.4
+    assert cfg.epoch_length_samples == 750
+
+
+def test_use_car_roundtrip(tmp_path):
+    y = _VALID_YAML + "\nuse_car: true\n"
+    cfg = load_config(_write_yaml(tmp_path, y))
+    assert cfg.use_car is True
+
+
+def test_snr_aggregate_roundtrip(tmp_path):
+    y = _VALID_YAML + "\nsnr_aggregate: median\nsnr_channel_indices: [0, 1]\n"
+    cfg = load_config(_write_yaml(tmp_path, y))
+    assert cfg.snr_aggregate == "median"
+    assert cfg.snr_channel_indices == [0, 1]
+
+
+def test_invalid_snr_aggregate_rejected(tmp_path):
+    y = _VALID_YAML + "\nsnr_aggregate: bogus\n"
+    with pytest.raises(ValueError, match="snr_aggregate"):
+        load_config(_write_yaml(tmp_path, y))
+
+
+def test_empty_snr_channel_indices_when_aggregate_rejected(tmp_path):
+    y = _VALID_YAML + "\nsnr_aggregate: max\nsnr_channel_indices: []\n"
+    with pytest.raises(ValueError, match="snr_channel_indices"):
+        load_config(_write_yaml(tmp_path, y))
+
+
+def test_invalid_artefact_policy_rejected(tmp_path):
+    y = _VALID_YAML + "\nartefact_policy: soft\n"
+    with pytest.raises(ValueError, match="artefact_policy"):
+        load_config(_write_yaml(tmp_path, y))
+
+
+def test_artefact_penalty_out_of_range_rejected(tmp_path):
+    y = _VALID_YAML + "\nartefact_penalty: 0\n"
+    with pytest.raises(ValueError, match="artefact_penalty"):
+        load_config(_write_yaml(tmp_path, y))
 
 
 # ---------------------------------------------------------------------------
@@ -165,3 +220,8 @@ def test_negative_artefact_threshold_rejected(tmp_path):
 def test_epoch_step_larger_than_epoch_rejected(tmp_path):
     with pytest.raises(ValueError, match="epoch_step_s"):
         load_config(_bad_yaml(tmp_path, epoch_length_s=1.0, epoch_step_s=2.0))
+
+
+def test_negative_prediction_smoothing_window_rejected(tmp_path):
+    with pytest.raises(ValueError, match="prediction_smoothing_window"):
+        load_config(_bad_yaml(tmp_path, prediction_smoothing_window=-1))

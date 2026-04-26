@@ -2,8 +2,8 @@
 
 Two collaborators:
 
-- :class:`Preprocessor` — notch (60 Hz) → bandpass (5–45 Hz) → CAR → artefact
-  gate.  All filters use zero-phase :func:`scipy.signal.sosfiltfilt`.
+- :class:`Preprocessor` — notch (mains, configurable) → bandpass (5–45 Hz) → optional
+  CAR → artefact gate.  All filters use zero-phase :func:`scipy.signal.sosfiltfilt`.
 - :class:`EpochBuffer` — fixed-length sliding window over the incoming chunk
   stream.  Pre-allocated buffer, emits ready epochs as numpy arrays.
 """
@@ -23,26 +23,35 @@ from layer2_processing.config import ProcessingConfig
 class EpochResult:
     """Output of :meth:`Preprocessor.process`."""
 
-    data: np.ndarray  # (channels, n_samples) float32, after notch+bandpass+CAR
+    data: np.ndarray  # (channels, n_samples) float32, after notch+bandpass (+CAR)
     artefactual: bool
     peak_to_peak_uv: np.ndarray  # (channels,) float32
 
 
 class Preprocessor:
-    """Stateless per-epoch preprocessor: notch → bandpass → CAR → artefact.
+    """Stateless per-epoch preprocessor: notch(es) → bandpass → optional CAR → artefact.
 
     Filters are pre-computed in second-order-section form so each call is a
     pair of cheap :func:`sosfiltfilt` invocations.
     """
 
     def __init__(self, cfg: ProcessingConfig) -> None:
+        self._use_car = bool(cfg.use_car)
         self._fs = float(cfg.sample_rate_hz)
 
-        # IIR notch (returns b, a) → convert to SOS for sosfiltfilt
-        b_notch, a_notch = signal.iirnotch(
-            w0=cfg.notch_freq_hz, Q=cfg.notch_q, fs=self._fs
-        )
-        self._sos_notch = signal.tf2sos(b_notch, a_notch)
+        notch_freqs: list[float] = [float(cfg.notch_freq_hz)]
+        for hz in cfg.additional_notch_freqs_hz:
+            hz = float(hz)
+            if hz <= 0:
+                continue
+            if any(abs(hz - f) < 0.5 for f in notch_freqs):
+                continue
+            notch_freqs.append(hz)
+
+        self._sos_notches: list[np.ndarray] = []
+        for w0 in notch_freqs:
+            b_notch, a_notch = signal.iirnotch(w0=w0, Q=cfg.notch_q, fs=self._fs)
+            self._sos_notches.append(signal.tf2sos(b_notch, a_notch))
 
         self._sos_band = signal.butter(
             N=cfg.bandpass_order,
@@ -59,12 +68,14 @@ class Preprocessor:
             self._artefact_idx = np.asarray(cfg.artefact_channel_indices, dtype=np.intp)
 
     def filter(self, epoch: np.ndarray) -> np.ndarray:
-        """Notch → bandpass → common-average reference. Returns float32 copy."""
+        """Notch(es) → bandpass → optional CAR. Returns float32 copy."""
         x = np.asarray(epoch, dtype=np.float64)
-        x = signal.sosfiltfilt(self._sos_notch, x, axis=1)
+        for sos in self._sos_notches:
+            x = signal.sosfiltfilt(sos, x, axis=1)
         x = signal.sosfiltfilt(self._sos_band, x, axis=1)
-        # Common Average Reference: subtract the per-sample mean across channels
-        x = x - x.mean(axis=0, keepdims=True)
+        if self._use_car:
+            # Common Average Reference: subtract the per-sample mean across channels
+            x = x - x.mean(axis=0, keepdims=True)
         return x.astype(np.float32, copy=False)
 
     def peak_to_peak(self, epoch: np.ndarray) -> np.ndarray:
