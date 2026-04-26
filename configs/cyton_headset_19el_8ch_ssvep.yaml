@@ -2,7 +2,7 @@
 # Use with ``configs/layer2_headset_19el_8ch_ssvep.yaml`` for matching SNR + artefact rows.
 board: cyton
 serial_port: auto
-sample_rate_hz: 500
+sample_rate_hz: 250
 channel_count: 8
 
 # Plug N1P…N8P (CH1…CH8) in this order. GND / REF go to the Cyton bias pins per OpenBCI docs

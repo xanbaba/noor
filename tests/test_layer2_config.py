@@ -63,6 +63,7 @@ def test_load_valid_yaml(tmp_path):
     assert cfg.stimulus_frequencies_hz == [9.0, 12.0, 15.0]
     assert cfg.classifier == "fbcca"
     assert cfg.artefact_channel_indices is None
+    assert cfg.snr_gate_enabled is True
 
 
 def test_artefact_channel_indices_roundtrip(tmp_path):
@@ -121,6 +122,17 @@ def test_default_config_file_loads():
     assert cfg.stimulus_frequencies_hz, "stimulus_frequencies_hz must be non-empty"
     assert cfg.snr_aggregate == "max"
     assert cfg.use_car is False
+    assert cfg.snr_gate_enabled is True
+
+
+def test_minimal_config_loads():
+    p = Path("configs/layer2_minimal.yaml")
+    if not p.exists():
+        pytest.skip("configs/layer2_minimal.yaml not found — run from project root.")
+    cfg = load_config(p)
+    assert cfg.snr_gate_enabled is False
+    assert cfg.artefact_policy == "ignore"
+    assert cfg.prediction_smoothing_window == 0
 
 
 def test_fast_demo_config_loads():
@@ -162,6 +174,18 @@ def test_invalid_artefact_policy_rejected(tmp_path):
     y = _VALID_YAML + "\nartefact_policy: soft\n"
     with pytest.raises(ValueError, match="artefact_policy"):
         load_config(_write_yaml(tmp_path, y))
+
+
+def test_artefact_policy_ignore_roundtrip(tmp_path):
+    y = _VALID_YAML + "\nartefact_policy: ignore\n"
+    cfg = load_config(_write_yaml(tmp_path, y))
+    assert cfg.artefact_policy == "ignore"
+
+
+def test_snr_gate_enabled_roundtrip(tmp_path):
+    y = _VALID_YAML + "\nsnr_gate_enabled: false\n"
+    cfg = load_config(_write_yaml(tmp_path, y))
+    assert cfg.snr_gate_enabled is False
 
 
 def test_artefact_penalty_out_of_range_rejected(tmp_path):
