@@ -1,8 +1,8 @@
-# Neuron: gaze at 6 Hz or 15 Hz, speak a command
+# Noor: gaze at 6 Hz or 15 Hz, speak a command
 
 ## A real-time SSVEP communicator on an 8-channel OpenBCI Cyton — not a Quest app, not a speller-with-Gemini, not a downloadable end-user product
 
-Neuron is a three-process Python stack that turns looking at a flickering tile into a confirmed action. An OpenBCI Cyton streams 8-channel EEG. Filter-bank CCA (FBCCA) decides whether the wearer is watching the **6 Hz** tile or the **15 Hz** tile. After **five consecutive** detections at the same frequency, a browser UI treats that as a deliberate choice: pick a need on the home list, ask for food or water, call a caregiver, speak a wheelchair direction, or spell a word letter by letter. Optional ElevenLabs TTS reads the result aloud.
+Noor is a three-process Python stack that turns looking at a flickering tile into a confirmed action. An OpenBCI Cyton streams 8-channel EEG. Filter-bank CCA (FBCCA) decides whether the wearer is watching the **6 Hz** tile or the **15 Hz** tile. After **five consecutive** detections at the same frequency, a browser UI treats that as a deliberate choice: pick a need on the home list, ask for food or water, call a caregiver, speak a wheelchair direction, or spell a word letter by letter. Optional ElevenLabs TTS reads the result aloud.
 
 There is one way to run it: install this repo, start the three layers in order, open the page.
 
